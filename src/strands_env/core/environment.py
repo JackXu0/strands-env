@@ -109,9 +109,9 @@ class Environment:
         return []
 
     def create_agent(self, conversation_history: Messages, tool_limiter: ToolIterationLimiter) -> Agent:
-        """Create an ephemeral Strands Agent with a fresh `TokenManager`."""
+        """Create an ephemeral Strands Agent with a fresh model instance to avoid cross-step contamination."""
         model = self.model_factory()
-        model.token_manager = TokenManager()
+        model.token_manager = TokenManager()  # only used for SGLangModel but harmless for other models
         return Agent(
             model=model,
             messages=list(conversation_history),
@@ -129,6 +129,7 @@ class Environment:
         """Extract metrics from the event loop. Override to add custom metrics."""
         usage = event_loop_metrics.accumulated_usage
         metrics_data = event_loop_metrics.accumulated_metrics
+        latency_ms = metrics_data.get("latencyMs")
 
         per_tool_metrics = {
             name: {
@@ -139,13 +140,13 @@ class Environment:
                 "latency_s": round(tm.total_time, 4),
             }
             for name, tm in event_loop_metrics.tool_metrics.items()
-        } or None
+        }
 
         return {
-            "model_calls": event_loop_metrics.cycle_count or None,
-            "model_latency_s": round(metrics_data["latencyMs"] / 1000.0, 4) if metrics_data.get("latencyMs") else None,
-            "input_tokens": usage.get("inputTokens") or None,
-            "output_tokens": usage.get("outputTokens") or None,
-            "total_tokens": usage.get("totalTokens") or None,
-            "per_tool_metrics": per_tool_metrics,
+            "model_calls": event_loop_metrics.cycle_count,
+            "model_latency_s": round(latency_ms / 1000.0, 4) if latency_ms is not None else None,
+            "input_tokens": usage.get("inputTokens"),
+            "output_tokens": usage.get("outputTokens"),
+            "total_tokens": usage.get("totalTokens"),
+            "per_tool_metrics": per_tool_metrics or None,
         }
