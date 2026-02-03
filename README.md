@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/strands-env.svg)](https://pypi.org/project/strands-env/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-RL environments for [Strands](https://github.com/strands-agents/sdk-python) agents — step, observe, reward.
+RL environments for [Strands Agents](https://github.com/strands-agents/sdk-python) — step, observe, reward.
 
 > `strands-agents` is designed for serving, not training. `strands-env` integrates [`strands-sglang`](https://github.com/horizon-rl/strands-sglang) to bridge this gap.
 
