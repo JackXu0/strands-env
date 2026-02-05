@@ -78,8 +78,8 @@ class MathRewardFunction(RewardFunction):
 
         try:
             matched = verify(gold, answer, float_rounding=self.float_rounding, timeout_seconds=self.timeout_seconds)
-        except Exception:
-            logger.debug("math-verify raised during comparison", exc_info=True)
+        except Exception as e:
+            logger.error(f"math-verify failed: {e} (gold={gold}, answer={answer})")
             matched = False
 
         return RewardResult(
