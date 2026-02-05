@@ -56,12 +56,12 @@ class AIMEEvaluator(Evaluator):
 
         actions = []
         for i, row in enumerate(dataset):
-            sample_id = row.get(AIME_HF_PATHS[version]["id_field"]) or i
-            problem = row.get(AIME_HF_PATHS[version]["problem_field"], None)
-            answer = row.get(AIME_HF_PATHS[version]["answer_field"], None)
-            if not all([sample_id, problem, answer]):
+            problem = row.get(AIME_HF_PATHS[version]["problem_field"])
+            answer = row.get(AIME_HF_PATHS[version]["answer_field"])
+            if problem is None or answer is None:
                 logger.warning(f"Missing problem or answer fields in row {i}, skipping row")
                 continue
+            sample_id = row.get(AIME_HF_PATHS[version]["id_field"]) or i
             actions.append(
                 Action(
                     message=str(problem),
