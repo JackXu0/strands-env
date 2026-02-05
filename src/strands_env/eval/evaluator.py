@@ -154,16 +154,20 @@ class Evaluator:
 
         semaphore = asyncio.Semaphore(self.max_concurrency)
         save_counter = 0
+        completed_counter = 0
+        total = len(to_process)
 
         async def process(problem_id: str, sample_id: str, action: Action) -> None:
-            nonlocal save_counter
+            nonlocal save_counter, completed_counter
             async with semaphore:
                 sample = await self.evaluate_sample(action)
                 self.results[problem_id].append(sample)
                 self.completed_ids.add(sample_id)
+                completed_counter += 1
                 save_counter += 1
                 if save_counter >= self.save_interval:
                     self.save_results()
+                    logger.info(f"Progress: {completed_counter}/{total} samples completed")
                     save_counter = 0
 
         tasks = [process(pid, sid, action) for pid, sid, action in to_process]
