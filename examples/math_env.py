@@ -19,7 +19,8 @@ from strands_tools import calculator
 
 from strands_env.core.environment import Environment
 from strands_env.core.models import ModelFactory, bedrock_model_factory, sglang_model_factory
-from strands_env.core.types import Action, RewardFunction, RewardResult, StepResult, TaskContext
+from strands_env.core.types import Action, TaskContext
+from strands_env.rewards.math_reward import MathRewardFunction
 
 logger = logging.getLogger(__name__)
 
@@ -40,21 +41,6 @@ class MathEnvironment(Environment):
 
     def get_tools(self) -> list:
         return [calculator]
-
-
-# ---------------------------------------------------------------------------
-# Reward
-# ---------------------------------------------------------------------------
-
-
-class ExactMatchReward(RewardFunction):
-    """Reward 1.0 if ground_truth appears in the final response, else 0.0."""
-
-    async def compute(self, action: Action, step_result: StepResult) -> RewardResult:
-        ground_truth = str(action.task_context.ground_truth)
-        final_response = step_result.observation.final_response or ""
-        matched = ground_truth in final_response
-        return RewardResult(reward=1.0 if matched else 0.0, info={"matched": matched})
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +96,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     model_factory = create_model_factory(args)
-    env = MathEnvironment(model_factory=model_factory, reward_fn=ExactMatchReward(), verbose=args.verbose)
+    env = MathEnvironment(model_factory=model_factory, reward_fn=MathRewardFunction(), verbose=args.verbose)
 
     for question, ground_truth in MATH_PROBLEMS:
         print(f"\n{'=' * 60}")
