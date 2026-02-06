@@ -73,7 +73,7 @@ async def run_eval(
 @click.option("--model-id", default=None, help="Model ID (auto-detected for SGLang)")
 @click.option("--sglang-base-url", default="http://localhost:30000", help="SGLang server URL")
 @click.option("--aime-version", default="2024", type=click.Choice(["2024", "2025"]), help="AIME dataset version")
-@click.option("--n-samples", default=8, type=int, help="Number of samples per prompt")
+@click.option("--n-samples-per-prompt", default=8, type=int, help="Number of samples per prompt")
 @click.option("--max-concurrency", default=30, type=int, help="Max concurrent evaluations")
 @click.option("--output", default="aime_results.jsonl", help="Output file for results")
 def main(
