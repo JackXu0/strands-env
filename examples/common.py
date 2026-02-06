@@ -26,6 +26,7 @@ from typing import Literal
 import httpx
 
 from strands_env.core.models import ModelFactory, bedrock_model_factory, sglang_model_factory
+from strands_env.utils.sglang import get_cached_client
 
 # Suppress transformers warning about missing PyTorch/TensorFlow
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
@@ -84,7 +85,6 @@ class ModelConfig:
             raise ValueError(f"Unknown backend: {self.backend}")
 
     def _create_sglang_factory(self) -> ModelFactory:
-        from strands_sglang import SGLangClient
         from transformers import AutoTokenizer
 
         base_url = self.base_url.rstrip("/")
@@ -97,7 +97,7 @@ class ModelConfig:
             model_id = resp.json()["model_path"]
 
         tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-        client = SGLangClient(base_url)
+        client = get_cached_client(base_url, max_connections=1000)
         return sglang_model_factory(
             model_id=model_id,
             tokenizer=tokenizer,
