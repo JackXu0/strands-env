@@ -60,5 +60,5 @@ class AIMEEvaluator(Evaluator):
                 )
             )
 
-        logger.info(f"[{self.benchmark_name}] Loaded {len(actions)}/{len(dataset)} problems")
+        logger.info(f"[{self.benchmark_name}] Loaded {len(actions)}/{len(dataset)} prompts")
         return actions

@@ -21,8 +21,8 @@ Usage:
     # Bedrock backend (requires AWS credentials)
     python examples/aime_eval.py --backend bedrock --model-id us.anthropic.claude-sonnet-4-20250514
 
-    # With multiple rollouts for pass@k
-    python examples/aime_eval.py --backend sglang --n-rollouts 8
+    # With multiple samples for pass@k
+    python examples/aime_eval.py --backend sglang --n-samples 8
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from strands_env.rewards.math_reward import MathRewardFunction
 async def run_eval(
     config: ModelConfig,
     aime_version: str,
-    n_rollouts: int,
+    n_samples_per_prompt: int,
     max_concurrency: int,
     output: str,
 ) -> None:
@@ -56,21 +56,16 @@ async def run_eval(
 
     evaluator = AIMEEvaluator(
         env_factory=env_factory,
-        n_rollouts=n_rollouts,
+        n_samples_per_prompt=n_samples_per_prompt,
         max_concurrency=max_concurrency,
         output_path=output,
     )
 
     actions = evaluator.load_dataset(aime_version)
     results = await evaluator.run(actions)
+    evaluator.compute_metrics(results)
 
-    click.echo(f"\nResults: {output}")
-    click.echo(f"Samples: {sum(len(s) for s in results.values())}")
-
-    pass_at_k = evaluator.compute_pass_at_k(results, k_values=list(range(1, n_rollouts + 1)))
-    click.echo(f"\npass@k (n={n_rollouts}):")
-    for k, score in pass_at_k.items():
-        click.echo(f"  pass@{k}: {score:.4f}")
+    click.echo(f"\nResults saved to: {output}")
 
 
 @click.command()
@@ -78,7 +73,7 @@ async def run_eval(
 @click.option("--model-id", default=None, help="Model ID (auto-detected for SGLang)")
 @click.option("--sglang-base-url", default="http://localhost:30000", help="SGLang server URL")
 @click.option("--aime-version", default="2024", type=click.Choice(["2024", "2025"]), help="AIME dataset version")
-@click.option("--n-rollouts", default=8, type=int, help="Number of rollouts per problem")
+@click.option("--n-samples", default=8, type=int, help="Number of samples per prompt")
 @click.option("--max-concurrency", default=30, type=int, help="Max concurrent evaluations")
 @click.option("--output", default="aime_results.jsonl", help="Output file for results")
 def main(
@@ -86,7 +81,7 @@ def main(
     model_id: str | None,
     sglang_base_url: str,
     aime_version: str,
-    n_rollouts: int,
+    n_samples_per_prompt: int,
     max_concurrency: int,
     output: str,
 ) -> None:
@@ -105,7 +100,7 @@ def main(
         run_eval(
             config=config,
             aime_version=aime_version,
-            n_rollouts=n_rollouts,
+            n_samples_per_prompt=n_samples_per_prompt,
             max_concurrency=max_concurrency,
             output=output,
         )

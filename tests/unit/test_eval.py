@@ -47,15 +47,15 @@ class TestEvaluator:
         evaluator = Evaluator(env_factory=factory, output_path=tmp_path / "results.jsonl")
         results = await evaluator.run(actions)
 
-        # With n_rollouts=1 (default), each action is run once
+        # With n_samples_per_prompt=1 (default), each action is run once
         assert mock_env.reset.await_count == 3
         assert mock_env.step.await_count == 3
         assert mock_env.cleanup.await_count == 3
-        assert len(results) == 3  # 3 problem_ids
+        assert len(results) == 3  # 3 prompt_ids
         assert sum(len(samples) for samples in results.values()) == 3
 
-    async def test_n_rollouts_duplication(self, mock_env, tmp_path):
-        """Each action is duplicated n_rollouts times."""
+    async def test_n_samples_per_prompt_duplication(self, mock_env, tmp_path):
+        """Each action is duplicated n_samples_per_prompt times."""
         mock_env.step.return_value = StepResult(observation=Observation())
 
         async def factory(action):
@@ -63,12 +63,12 @@ class TestEvaluator:
 
         actions = [Action(message="q", task_context=TaskContext(id="p1"))]
 
-        evaluator = Evaluator(env_factory=factory, n_rollouts=5, output_path=tmp_path / "results.jsonl")
+        evaluator = Evaluator(env_factory=factory, n_samples_per_prompt=5, output_path=tmp_path / "results.jsonl")
         results = await evaluator.run(actions)
 
         # 5 rollouts per problem
         assert mock_env.step.await_count == 5
-        assert len(results) == 1  # One problem_id key
+        assert len(results) == 1  # One prompt_id key
         assert "p1" in results
         assert len(results["p1"]) == 5  # 5 samples for that problem
 
@@ -189,7 +189,7 @@ class TestCheckpoint:
         ])
 
         assert mock_env.step.await_count == 1  # Only s2 was processed
-        assert len(results) == 2  # Both problem_ids in results
+        assert len(results) == 2  # Both prompt_ids in results
         assert sum(len(samples) for samples in results.values()) == 2
 
 
@@ -298,7 +298,7 @@ class TestComputeMetrics:
             env.cleanup = AsyncMock()
             return env
 
-        evaluator = Evaluator(env_factory=factory, n_rollouts=3, output_path=tmp_path / "results.jsonl")
+        evaluator = Evaluator(env_factory=factory, n_samples_per_prompt=3, output_path=tmp_path / "results.jsonl")
         results = await evaluator.run([Action(message="q", task_context=TaskContext(id="p1"))])
 
         metrics = evaluator.compute_metrics(results)

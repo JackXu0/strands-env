@@ -57,7 +57,7 @@ class Evaluator:
         env_factory: AsyncEnvFactory,
         *,
         max_concurrency: int = 10,
-        n_rollouts: int = 1,
+        n_samples_per_prompt: int = 1,
         output_path: Path | str = Path.cwd() / "results.jsonl",
         save_interval: int = 10,
         keep_tokens: bool = False,
@@ -68,7 +68,7 @@ class Evaluator:
         Args:
             env_factory: Async factory function that creates a fresh Environment per sample.
             max_concurrency: Maximum concurrent evaluate_sample() calls.
-            n_rollouts: Number of rollouts per problem (for pass@k, set to max(k_values)).
+            n_samples_per_prompt: Number of samples per prompt (for pass@k, set to max(k_values)).
             output_path: Path to JSONL file for saving results. Enables resume.
             save_interval: Flush results to disk every N completed samples.
             keep_tokens: Keep token-level observation in results (only valid for `SGLangModel` backends).
@@ -76,14 +76,16 @@ class Evaluator:
         """
         self.env_factory: AsyncEnvFactory = env_factory
         self.max_concurrency = max_concurrency
-        self.n_rollouts = n_rollouts
+        self.n_samples_per_prompt = n_samples_per_prompt
         self.output_path = Path(output_path)
         self.save_interval = save_interval
         self.keep_tokens = keep_tokens
 
-        # Default metric: pass@k for k in 1..n_rollouts
+        # Default metric: pass@k for k in 1..n_samples_per_prompt
         if metric_fns is None:
-            metric_fns = [partial(pass_at_k_metric, k_values=list(range(1, n_rollouts + 1)), reward_threshold=1.0)]
+            metric_fns = [
+                partial(pass_at_k_metric, k_values=list(range(1, n_samples_per_prompt + 1)), reward_threshold=1.0)
+            ]
         self.metric_fns = metric_fns
 
         # Runtime state
@@ -105,9 +107,9 @@ class Evaluator:
         with open(self.output_path, encoding="utf-8") as f:
             for line in f:
                 data = json.loads(line)
-                problem_id = data.pop("problem_id")
+                prompt_id = data.pop("prompt_id")
                 sample = EvalSample.model_validate(data)
-                self.results[problem_id].append(sample)
+                self.results[prompt_id].append(sample)
                 self.completed_ids.add(sample.action.task_context.id)
 
         total = sum(len(s) for s in self.results.values())
@@ -117,10 +119,10 @@ class Evaluator:
         """Save all samples to checkpoint file."""
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.output_path, "w", encoding="utf-8") as f:
-            for problem_id, samples in self.results.items():
+            for prompt_id, samples in self.results.items():
                 for sample in samples:
                     data = sample.model_dump()
-                    data["problem_id"] = problem_id
+                    data["prompt_id"] = prompt_id
                     f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
     async def evaluate_sample(self, action: Action) -> EvalSample:
@@ -134,37 +136,37 @@ class Evaluator:
         return EvalSample(action=action, step_result=step_result)
 
     async def run(self, actions: Iterable[Action]) -> dict[str, list[EvalSample]]:
-        """Run evaluation on actions with n_rollouts each.
+        """Run evaluation on actions with n_samples_per_prompt each.
 
         Args:
             actions: Actions to evaluate.
 
         Returns:
-            Dict mapping problem_id to list of EvalSample rollouts.
+            Dict mapping prompt_id to list of EvalSample results.
         """
         self.load_results()
 
-        # Expand actions to (problem_id, sample_id, action) tuples
+        # Expand actions to (prompt_id, sample_id, action) tuples
         to_process: list[tuple[str, str, Action]] = []
         for action in actions:
-            problem_id = action.task_context.id
-            for i in range(self.n_rollouts):
-                sample_id = f"{problem_id}_{i}"
+            prompt_id = action.task_context.id
+            for i in range(self.n_samples_per_prompt):
+                sample_id = f"{prompt_id}_{i}"
                 if sample_id not in self.completed_ids:
                     expanded = action.model_copy(deep=True)
                     expanded.task_context.id = sample_id
-                    to_process.append((problem_id, sample_id, expanded))
+                    to_process.append((prompt_id, sample_id, expanded))
 
         semaphore = asyncio.Semaphore(self.max_concurrency)
         save_counter = 0
         completed = 0
         total = len(to_process)
 
-        async def process(problem_id: str, sample_id: str, action: Action) -> None:
+        async def process(prompt_id: str, sample_id: str, action: Action) -> None:
             nonlocal save_counter, completed
             async with semaphore:
                 sample = await self.evaluate_sample(action)
-                self.results[problem_id].append(sample)
+                self.results[prompt_id].append(sample)
                 self.completed_ids.add(sample_id)
                 completed += 1
                 save_counter += 1
@@ -179,11 +181,12 @@ class Evaluator:
         self.save_results()
         return dict(self.results)
 
-    def compute_metrics(self, results: dict[str, list[EvalSample]]) -> dict[str, float]:
+    def compute_metrics(self, results: dict[str, list[EvalSample]], log: bool = True) -> dict[str, float]:
         """Compute all metrics on results.
 
         Args:
-            results: Dict mapping problem_id to sample rollouts.
+            results: Dict mapping prompt_id to sample results.
+            log: Whether to log the metrics summary.
 
         Returns:
             Dict mapping metric names to values.
@@ -191,4 +194,19 @@ class Evaluator:
         metrics = {}
         for fn in self.metric_fns:
             metrics.update(fn(results))
+
+        if log and metrics:
+            n_prompts = len(results)
+            n_samples = sum(len(s) for s in results.values())
+            name = self.benchmark_name or "Evaluation"
+
+            # Build formatted output
+            lines = [f"{'─' * 40}", f"  {name} Results", f"{'─' * 40}"]
+            lines.append(f"  Prompts: {n_prompts}  Samples (n={self.n_samples_per_prompt}): {n_samples}")
+            lines.append("")
+            for metric, value in sorted(metrics.items()):
+                lines.append(f"  {metric:<12} {value:>6.1%}")
+            lines.append(f"{'─' * 40}")
+            logger.info("\n" + "\n".join(lines))
+
         return metrics

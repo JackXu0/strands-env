@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .evaluator import EvalSample
 
-#: Type alias for metric function: takes results {problem_id: [EvalSample] * n_rollouts}, returns {metric_name: value}.
+#: Type alias for metric function: takes results {prompt_id: [EvalSample, ...]}, returns {metric_name: value}.
 MetricFn = Callable[[dict[str, list["EvalSample"]]], dict[str, float]]
 
 
@@ -35,7 +35,7 @@ def pass_at_k_metric(
     """Compute pass@k metrics using unbiased estimator.
 
     Args:
-        results: Dict mapping problem_id to sample rollouts.
+        results: Dict mapping prompt_id to list of samples.
         k_values: List of k values for pass@k.
         reward_threshold: Reward threshold for "pass" (default: 1.0).
 
