@@ -14,9 +14,12 @@
 
 from .aime import AIMEEvaluator
 from .evaluator import EvalSample, Evaluator
+from .metrics import MetricFn, pass_at_k_metric
 
 __all__ = [
     "AIMEEvaluator",
     "EvalSample",
     "Evaluator",
+    "MetricFn",
+    "pass_at_k_metric",
 ]

@@ -19,14 +19,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import math
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable
+from functools import partial
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from strands_env.core import Action, Environment, StepResult
+
+from .metrics import MetricFn, pass_at_k_metric
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,7 @@ class Evaluator:
         output_path: Path | str = Path.cwd() / "results.jsonl",
         save_interval: int = 10,
         keep_tokens: bool = False,
+        metric_fns: list[MetricFn] | None = None,
     ):
         """Initialize the evaluator.
 
@@ -69,6 +72,7 @@ class Evaluator:
             output_path: Path to JSONL file for saving results. Enables resume.
             save_interval: Flush results to disk every N completed samples.
             keep_tokens: Keep token-level observation in results (only valid for `SGLangModel` backends).
+            metric_fns: List of metric functions. Defaults to [pass_at_k_metric].
         """
         self.env_factory: AsyncEnvFactory = env_factory
         self.max_concurrency = max_concurrency
@@ -76,6 +80,11 @@ class Evaluator:
         self.output_path = Path(output_path)
         self.save_interval = save_interval
         self.keep_tokens = keep_tokens
+
+        # Default metric: pass@k for k in 1..n_rollouts
+        if metric_fns is None:
+            metric_fns = [partial(pass_at_k_metric, k_values=list(range(1, n_rollouts + 1)), reward_threshold=1.0)]
+        self.metric_fns = metric_fns
 
         # Runtime state
         self.results: dict[str, list[EvalSample]] = defaultdict(list)
@@ -106,6 +115,7 @@ class Evaluator:
 
     def save_results(self) -> None:
         """Save all samples to checkpoint file."""
+        self.output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.output_path, "w", encoding="utf-8") as f:
             for problem_id, samples in self.results.items():
                 for sample in samples:
@@ -169,46 +179,16 @@ class Evaluator:
         self.save_results()
         return dict(self.results)
 
-    @staticmethod
-    def _pass_at_k_single(n: int, c: int, k: int) -> float:
-        """Compute pass@k for a single problem using unbiased estimator."""
-        if n - c < k:
-            return 1.0
-        if c == 0:
-            return 0.0
-        log_ratio = sum(math.log(n - c - i) - math.log(n - i) for i in range(k))
-        return 1.0 - math.exp(log_ratio)
-
-    @staticmethod
-    def compute_pass_at_k(
-        results: dict[str, list[EvalSample]],
-        k_values: list[int] = [1],
-        reward_threshold: float = 1.0,
-    ) -> dict[int, float]:
-        """Compute pass@k metrics.
+    def compute_metrics(self, results: dict[str, list[EvalSample]]) -> dict[str, float]:
+        """Compute all metrics on results.
 
         Args:
             results: Dict mapping problem_id to sample rollouts.
-            k_values: List of k values for pass@k.
-            reward_threshold: Reward threshold for "pass" (default: 1.0).
 
         Returns:
-            Dict mapping k to average pass@k score.
+            Dict mapping metric names to values.
         """
-        if not results:
-            return {k: 0.0 for k in k_values}
-
-        def is_correct(s: EvalSample) -> bool:
-            r = s.step_result.reward
-            return r is not None and r.reward >= reward_threshold
-
-        pass_at_k = {}
-        for k in k_values:
-            scores = []
-            for samples in results.values():
-                n, c = len(samples), sum(1 for s in samples if is_correct(s))
-                if k <= n:
-                    scores.append(Evaluator._pass_at_k_single(n, c, k))
-            pass_at_k[k] = sum(scores) / len(scores) if scores else 0.0
-
-        return pass_at_k
+        metrics = {}
+        for fn in self.metric_fns:
+            metrics.update(fn(results))
+        return metrics

@@ -22,7 +22,7 @@ Usage:
     python examples/aime_eval.py --backend bedrock --model-id us.anthropic.claude-sonnet-4-20250514
 
     # With multiple rollouts for pass@k
-    python examples/aime_eval.py --backend sglang --n-rollouts 8 --k-values 1,5,8
+    python examples/aime_eval.py --backend sglang --n-rollouts 8
 """
 
 from __future__ import annotations
@@ -31,112 +31,21 @@ import asyncio
 import logging
 
 import click
-import httpx
+from common import ModelConfig, SamplingParams
 
-from strands_env.core.models import ModelFactory, bedrock_model_factory, sglang_model_factory
 from strands_env.environments.simple_math_env import SimpleMathEnv
 from strands_env.eval import AIMEEvaluator
 from strands_env.rewards.math_reward import MathRewardFunction
 
-SAMPLING_PARAMS = {"max_new_tokens": 16384, "temperature": 0.7, "top_p": 0.95}
-
-# ---------------------------------------------------------------------------
-# Model factory helpers
-# ---------------------------------------------------------------------------
-
-
-def create_model_factory(backend: str, model_id: str | None, sglang_base_url: str) -> ModelFactory:
-    if backend == "sglang":
-        return _create_sglang_factory(model_id, sglang_base_url)
-    elif backend == "bedrock":
-        return _create_bedrock_factory(model_id)
-    else:
-        raise ValueError(f"Unknown backend: {backend}")
-
-
-def _create_sglang_factory(model_id: str | None, sglang_base_url: str) -> ModelFactory:
-    from strands_sglang import SGLangClient
-    from transformers import AutoTokenizer
-
-    base_url = sglang_base_url.rstrip("/")
-    if model_id is None:
-        resp = httpx.get(f"{base_url}/get_model_info", timeout=10)
-        resp.raise_for_status()
-        model_id = resp.json()["model_path"]
-        click.echo(f"Auto-detected model: {model_id}")
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-    client = SGLangClient(base_url)
-    return sglang_model_factory(
-        model_id=model_id,
-        tokenizer=tokenizer,
-        client=client,
-        sampling_params=SAMPLING_PARAMS,
-    )
-
-
-def _create_bedrock_factory(model_id: str | None) -> ModelFactory:
-    import boto3
-
-    model_id = model_id or "us.anthropic.claude-sonnet-4-20250514"
-    click.echo(f"Using Bedrock model: {model_id}")
-    return bedrock_model_factory(
-        model_id=model_id,
-        boto_session=boto3.Session(),
-        sampling_params=SAMPLING_PARAMS,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
-@click.command()
-@click.option("--backend", required=True, type=click.Choice(["sglang", "bedrock"]), help="Model backend")
-@click.option("--model-id", default=None, help="Model ID (auto-detected for SGLang)")
-@click.option("--sglang-base-url", default="http://localhost:30000", help="SGLang server URL")
-@click.option("--aime-version", default="2024", type=click.Choice(["2024", "2025"]), help="AIME dataset version")
-@click.option("--n-rollouts", default=1, type=int, help="Number of rollouts per problem")
-@click.option("--max-concurrency", default=10, type=int, help="Max concurrent evaluations")
-@click.option("--output", default="aime_results.jsonl", help="Output file for results")
-def main(
-    backend: str,
-    model_id: str | None,
-    sglang_base_url: str,
-    aime_version: str,
-    n_rollouts: int,
-    max_concurrency: int,
-    output: str,
-) -> None:
-    """Run pass@k evaluation on AIME math problems."""
-    # Suppress noisy library logging, keep strands_env at INFO for progress
-    logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    logging.getLogger("strands_env").setLevel(logging.INFO)
-
-    asyncio.run(
-        run_eval(
-            backend=backend,
-            model_id=model_id,
-            sglang_base_url=sglang_base_url,
-            aime_version=aime_version,
-            n_rollouts=n_rollouts,
-            max_concurrency=max_concurrency,
-            output=output,
-        )
-    )
-
 
 async def run_eval(
-    backend: str,
-    model_id: str | None,
-    sglang_base_url: str,
+    config: ModelConfig,
     aime_version: str,
     n_rollouts: int,
     max_concurrency: int,
     output: str,
 ) -> None:
-    model_factory = create_model_factory(backend, model_id, sglang_base_url)
+    model_factory = config.create_factory()
     reward_fn = MathRewardFunction()
 
     async def env_factory(_):
@@ -152,20 +61,55 @@ async def run_eval(
         output_path=output,
     )
 
-    click.echo(f"Loading AIME {aime_version} dataset...")
     actions = evaluator.load_dataset(aime_version)
-    click.echo(f"Loaded {len(actions)} problems")
-
-    click.echo(f"Running evaluation with {n_rollouts} rollout(s) per problem...")
     results = await evaluator.run(actions)
 
-    click.echo(f"\nResults saved to: {output}")
-    click.echo(f"Total samples: {sum(len(samples) for samples in results.values())}")
+    click.echo(f"\nResults: {output}")
+    click.echo(f"Samples: {sum(len(s) for s in results.values())}")
 
     pass_at_k = evaluator.compute_pass_at_k(results, k_values=list(range(1, n_rollouts + 1)))
-    click.echo(f"\npass@k metrics given (n={n_rollouts}):")
+    click.echo(f"\npass@k (n={n_rollouts}):")
     for k, score in pass_at_k.items():
         click.echo(f"  pass@{k}: {score:.4f}")
+
+
+@click.command()
+@click.option("--backend", required=True, type=click.Choice(["sglang", "bedrock"]), help="Model backend")
+@click.option("--model-id", default=None, help="Model ID (auto-detected for SGLang)")
+@click.option("--sglang-base-url", default="http://localhost:30000", help="SGLang server URL")
+@click.option("--aime-version", default="2024", type=click.Choice(["2024", "2025"]), help="AIME dataset version")
+@click.option("--n-rollouts", default=8, type=int, help="Number of rollouts per problem")
+@click.option("--max-concurrency", default=30, type=int, help="Max concurrent evaluations")
+@click.option("--output", default="aime_results.jsonl", help="Output file for results")
+def main(
+    backend: str,
+    model_id: str | None,
+    sglang_base_url: str,
+    aime_version: str,
+    n_rollouts: int,
+    max_concurrency: int,
+    output: str,
+) -> None:
+    """Run pass@k evaluation on AIME math problems."""
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.getLogger("strands_env").setLevel(logging.INFO)
+
+    config = ModelConfig(
+        backend=backend,
+        model_id=model_id,
+        base_url=sglang_base_url,
+        sampling_params=SamplingParams(),
+    )
+
+    asyncio.run(
+        run_eval(
+            config=config,
+            aime_version=aime_version,
+            n_rollouts=n_rollouts,
+            max_concurrency=max_concurrency,
+            output=output,
+        )
+    )
 
 
 if __name__ == "__main__":

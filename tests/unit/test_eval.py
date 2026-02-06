@@ -6,6 +6,7 @@ import pytest
 
 from strands_env.core import Action, Environment, Observation, RewardResult, StepResult, TaskContext
 from strands_env.eval import AIMEEvaluator, EvalSample, Evaluator
+from strands_env.eval.metrics import pass_at_k_metric
 
 # ---------------------------------------------------------------------------
 # EvalSample
@@ -87,16 +88,16 @@ class TestEvaluator:
             env.cleanup = AsyncMock()
             return env
 
-        actions = [Action(message="a"), Action(message="b")]
+        actions = [Action(message="q1"), Action(message="q2")]
         evaluator = Evaluator(env_factory=factory, output_path=tmp_path / "results.jsonl")
         await evaluator.run(actions)
 
         assert len(received_actions) == 2
-        assert received_actions[0].message == "a"
-        assert received_actions[1].message == "b"
+        assert received_actions[0].message == "q1"
+        assert received_actions[1].message == "q2"
 
-    async def test_concurrency_control(self, tmp_path):
-        """Verify semaphore limits concurrent calls."""
+    async def test_max_concurrency(self, tmp_path):
+        """max_concurrency limits concurrent env calls."""
         import asyncio
 
         concurrent_count = 0
@@ -193,35 +194,11 @@ class TestCheckpoint:
 
 
 # ---------------------------------------------------------------------------
-# pass@k
+# pass@k metric
 # ---------------------------------------------------------------------------
 
 
-class TestPassAtKSingle:
-    def test_all_correct(self):
-        assert Evaluator._pass_at_k_single(n=10, c=10, k=1) == 1.0
-        assert Evaluator._pass_at_k_single(n=10, c=10, k=5) == 1.0
-
-    def test_none_correct(self):
-        assert Evaluator._pass_at_k_single(n=10, c=0, k=1) == 0.0
-        assert Evaluator._pass_at_k_single(n=10, c=0, k=5) == 0.0
-
-    def test_half_correct(self):
-        # pass@1 = 1 - C(5,1)/C(10,1) = 1 - 5/10 = 0.5
-        assert Evaluator._pass_at_k_single(n=10, c=5, k=1) == pytest.approx(0.5)
-
-    def test_one_correct_out_of_ten(self):
-        # pass@1 = 1 - 9/10 = 0.1
-        assert Evaluator._pass_at_k_single(n=10, c=1, k=1) == pytest.approx(0.1)
-        # pass@5 = 1 - C(9,5)/C(10,5) = 0.5
-        assert Evaluator._pass_at_k_single(n=10, c=1, k=5) == pytest.approx(0.5)
-
-    def test_not_enough_incorrect(self):
-        # If n - c < k, pass@k = 1.0 (guaranteed to get a correct one)
-        assert Evaluator._pass_at_k_single(n=5, c=4, k=2) == 1.0
-
-
-class TestComputePassAtK:
+class TestPassAtKMetric:
     def _make_sample(self, reward: float, idx: int = 0) -> EvalSample:
         return EvalSample(
             action=Action(message="q", task_context=TaskContext(id=f"sample_{idx}")),
@@ -229,18 +206,18 @@ class TestComputePassAtK:
         )
 
     def test_empty_samples(self):
-        result = Evaluator.compute_pass_at_k({}, k_values=[1])
-        assert result == {1: 0.0}
+        result = pass_at_k_metric({}, k_values=[1])
+        assert result == {"pass@1": 0.0}
 
     def test_all_correct(self):
         results = {"p1": [self._make_sample(1.0, i) for i in range(5)]}
-        result = Evaluator.compute_pass_at_k(results, k_values=[1])
-        assert result[1] == 1.0
+        result = pass_at_k_metric(results, k_values=[1])
+        assert result["pass@1"] == 1.0
 
     def test_none_correct(self):
         results = {"p1": [self._make_sample(0.0, i) for i in range(5)]}
-        result = Evaluator.compute_pass_at_k(results, k_values=[1])
-        assert result[1] == 0.0
+        result = pass_at_k_metric(results, k_values=[1])
+        assert result["pass@1"] == 0.0
 
     def test_multiple_problems(self):
         # p1: 2/2 correct -> pass@1 = 1.0
@@ -250,32 +227,32 @@ class TestComputePassAtK:
             "p2": [self._make_sample(0.0, 0), self._make_sample(0.0, 1)],
         }
         # Average: (1.0 + 0.0) / 2 = 0.5
-        result = Evaluator.compute_pass_at_k(results, k_values=[1])
-        assert result[1] == pytest.approx(0.5)
+        result = pass_at_k_metric(results, k_values=[1])
+        assert result["pass@1"] == pytest.approx(0.5)
 
     def test_multiple_k_values(self):
         # p1: 1/5 correct
         results = {"p1": [self._make_sample(1.0 if i == 0 else 0.0, i) for i in range(5)]}
-        result = Evaluator.compute_pass_at_k(results, k_values=[1, 5])
+        result = pass_at_k_metric(results, k_values=[1, 5])
         # pass@1 = 1 - 4/5 = 0.2
-        assert result[1] == pytest.approx(0.2)
+        assert result["pass@1"] == pytest.approx(0.2)
         # pass@5 = 1.0 (n-c=4 < k=5, guaranteed to get the correct one)
-        assert result[5] == pytest.approx(1.0)
+        assert result["pass@5"] == pytest.approx(1.0)
 
     def test_custom_reward_threshold(self):
         results = {"p1": [self._make_sample(0.5, 0)]}
         # Default threshold 1.0 - not correct
-        result = Evaluator.compute_pass_at_k(results, k_values=[1], reward_threshold=1.0)
-        assert result[1] == 0.0
+        result = pass_at_k_metric(results, k_values=[1], reward_threshold=1.0)
+        assert result["pass@1"] == 0.0
         # Threshold 0.5 - correct
-        result = Evaluator.compute_pass_at_k(results, k_values=[1], reward_threshold=0.5)
-        assert result[1] == 1.0
+        result = pass_at_k_metric(results, k_values=[1], reward_threshold=0.5)
+        assert result["pass@1"] == 1.0
 
     def test_k_larger_than_n_skipped(self):
         # Only 2 samples, k=5 - this problem is skipped
         results = {"p1": [self._make_sample(1.0, 0), self._make_sample(1.0, 1)]}
-        result = Evaluator.compute_pass_at_k(results, k_values=[5])
-        assert result[5] == 0.0  # No problems have enough samples
+        result = pass_at_k_metric(results, k_values=[5])
+        assert result["pass@5"] == 0.0  # No problems have enough samples
 
     def test_none_reward_handled(self):
         """Samples with None reward are treated as incorrect."""
@@ -283,8 +260,52 @@ class TestComputePassAtK:
             action=Action(message="q", task_context=TaskContext(id="p1_0")),
             step_result=StepResult(observation=Observation(), reward=None),
         )
-        result = Evaluator.compute_pass_at_k({"p1": [sample]}, k_values=[1])
-        assert result[1] == 0.0
+        result = pass_at_k_metric({"p1": [sample]}, k_values=[1])
+        assert result["pass@1"] == 0.0
+
+    def test_half_correct(self):
+        # pass@1 = 1 - C(5,1)/C(10,1) = 1 - 5/10 = 0.5
+        results = {"p1": [self._make_sample(1.0 if i < 5 else 0.0, i) for i in range(10)]}
+        result = pass_at_k_metric(results, k_values=[1])
+        assert result["pass@1"] == pytest.approx(0.5)
+
+    def test_one_correct_out_of_ten(self):
+        results = {"p1": [self._make_sample(1.0 if i == 0 else 0.0, i) for i in range(10)]}
+        result = pass_at_k_metric(results, k_values=[1, 5])
+        # pass@1 = 1 - 9/10 = 0.1
+        assert result["pass@1"] == pytest.approx(0.1)
+        # pass@5 = 1 - C(9,5)/C(10,5) = 0.5
+        assert result["pass@5"] == pytest.approx(0.5)
+
+
+class TestComputeMetrics:
+    def _make_sample(self, reward: float, idx: int = 0) -> EvalSample:
+        return EvalSample(
+            action=Action(message="q", task_context=TaskContext(id=f"sample_{idx}")),
+            step_result=StepResult(observation=Observation(), reward=RewardResult(reward=reward)),
+        )
+
+    async def test_default_metrics(self, tmp_path):
+        """Default metric_fns includes pass@k."""
+
+        async def factory(action):
+            env = MagicMock()
+            env.reset = AsyncMock()
+            env.step = AsyncMock(return_value=StepResult(
+                observation=Observation(),
+                reward=RewardResult(reward=1.0),
+            ))
+            env.cleanup = AsyncMock()
+            return env
+
+        evaluator = Evaluator(env_factory=factory, n_rollouts=3, output_path=tmp_path / "results.jsonl")
+        results = await evaluator.run([Action(message="q", task_context=TaskContext(id="p1"))])
+
+        metrics = evaluator.compute_metrics(results)
+        assert "pass@1" in metrics
+        assert "pass@2" in metrics
+        assert "pass@3" in metrics
+        assert metrics["pass@1"] == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -293,45 +314,62 @@ class TestComputePassAtK:
 
 
 class TestAIMEEvaluator:
-    @pytest.fixture
-    def mock_factory(self):
+    def test_benchmark_name(self):
         async def factory(action):
-            env = MagicMock(spec=Environment)
-            env.reset = AsyncMock()
-            env.step = AsyncMock(return_value=StepResult(observation=Observation()))
-            env.cleanup = AsyncMock()
-            return env
+            return MagicMock()
 
-        return factory
+        evaluator = AIMEEvaluator(env_factory=factory)
+        assert evaluator.benchmark_name == "AIME"
 
-    def test_load_dataset(self, mock_factory, tmp_path, mocker):
-        """Load AIME problems from HuggingFace dataset."""
-        mock_data = [
-            {"id": "aime_2024_1", "problem": "Find x such that x^2 = 4", "answer": "2"},
-            {"id": "aime_2024_2", "problem": "What is 5 + 7?", "answer": "12"},
+    def test_load_dataset_mocked(self, mocker):
+        """load_dataset returns Action objects from HuggingFace dataset."""
+        mock_dataset = [
+            {"id": 1, "problem": "What is 1+1?", "answer": "2"},
+            {"id": 2, "problem": "What is 2+2?", "answer": "4"},
         ]
-        mocker.patch("strands_env.eval.aime.load_dataset", return_value=mock_data)
+        mocker.patch("strands_env.eval.aime.load_dataset", return_value=mock_dataset)
 
-        evaluator = AIMEEvaluator(env_factory=mock_factory, output_path=tmp_path / "results.jsonl")
-        actions = evaluator.load_dataset("2024")
+        async def factory(action):
+            return MagicMock()
+
+        evaluator = AIMEEvaluator(env_factory=factory)
+        actions = list(evaluator.load_dataset("2024"))
 
         assert len(actions) == 2
-        assert actions[0].message == "Find x such that x^2 = 4"
+        assert actions[0].message == "What is 1+1?"
         assert actions[0].task_context.ground_truth == "2"
+        assert actions[0].task_context.id == "AIME_2024_1"
 
-    def test_skips_invalid_rows(self, mock_factory, tmp_path, mocker):
-        """Skip rows missing required fields."""
-        mock_data = [
-            {"problem": "Valid", "answer": "1"},
-            {"problem": "Missing answer"},
-            {"answer": "Missing problem"},
-            {"problem": "Also valid", "answer": "2"},
+    def test_load_dataset_skips_missing_fields(self, mocker):
+        """Rows with missing problem/answer are skipped."""
+        mock_dataset = [
+            {"id": 1, "problem": "What is 1+1?", "answer": "2"},
+            {"id": 2, "problem": None, "answer": "4"},  # Missing problem
+            {"id": 3, "problem": "What is 3+3?", "answer": None},  # Missing answer
         ]
-        mocker.patch("strands_env.eval.aime.load_dataset", return_value=mock_data)
+        mocker.patch("strands_env.eval.aime.load_dataset", return_value=mock_dataset)
 
-        evaluator = AIMEEvaluator(env_factory=mock_factory, output_path=tmp_path / "results.jsonl")
-        actions = evaluator.load_dataset("2024")
+        async def factory(action):
+            return MagicMock()
 
-        assert len(actions) == 2
-        assert actions[0].message == "Valid"
-        assert actions[1].message == "Also valid"
+        evaluator = AIMEEvaluator(env_factory=factory)
+        actions = list(evaluator.load_dataset("2024"))
+
+        assert len(actions) == 1
+        assert actions[0].task_context.id == "AIME_2024_1"
+
+    def test_load_dataset_uses_index_for_missing_id(self, mocker):
+        """Falls back to row index if id field is missing."""
+        mock_dataset = [
+            {"problem": "What is 1+1?", "answer": "2"},  # No id field
+        ]
+        mocker.patch("strands_env.eval.aime.load_dataset", return_value=mock_dataset)
+
+        async def factory(action):
+            return MagicMock()
+
+        evaluator = AIMEEvaluator(env_factory=factory)
+        actions = list(evaluator.load_dataset("2024"))
+
+        assert len(actions) == 1
+        assert actions[0].task_context.id == "AIME_2024_0"  # Uses index 0
