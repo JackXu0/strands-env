@@ -12,8 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Simple math environment with a calculator tool."""
+"""Simple math environment using a calculator tool."""
 
-from .env import SimpleMathEnv
+from pathlib import Path
 
-__all__ = ["SimpleMathEnv"]
+from strands_tools import calculator
+
+from strands_env.core.environment import Environment
+
+
+class CalculatorEnv(Environment):
+    """Simple math environment using a calculator tool."""
+
+    default_system_prompt_path = Path(__file__).parent / "system_prompt.md"
+
+    def get_tools(self):
+        return [calculator]

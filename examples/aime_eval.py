@@ -33,7 +33,7 @@ import logging
 import click
 from common import ModelConfig, SamplingParams
 
-from strands_env.environments.simple_math_env import SimpleMathEnv
+from strands_env.environments.calculator.env import CalculatorEnv
 from strands_env.eval import AIMEEvaluator
 from strands_env.rewards.math_reward import MathRewardFunction
 
@@ -49,7 +49,7 @@ async def run_eval(
     reward_fn = MathRewardFunction()
 
     async def env_factory(_):
-        env = SimpleMathEnv(model_factory=model_factory, reward_fn=reward_fn, verbose=False)
+        env = CalculatorEnv(model_factory=model_factory, reward_fn=reward_fn, verbose=False)
         env.system_prompt = None
         env.get_tools = lambda: []
         return env

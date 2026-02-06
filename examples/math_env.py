@@ -31,7 +31,7 @@ import click
 from common import ModelConfig, SamplingParams
 
 from strands_env.core.types import Action, TaskContext
-from strands_env.environments.simple_math_env import SimpleMathEnv
+from strands_env.environments.calculator.env import CalculatorEnv
 from strands_env.rewards.math_reward import MathRewardFunction
 
 MATH_PROBLEMS = [
@@ -43,7 +43,7 @@ MATH_PROBLEMS = [
 
 async def run_math_env(config: ModelConfig, verbose: bool) -> None:
     model_factory = config.create_factory()
-    env = SimpleMathEnv(model_factory=model_factory, reward_fn=MathRewardFunction(), verbose=verbose)
+    env = CalculatorEnv(model_factory=model_factory, reward_fn=MathRewardFunction(), verbose=verbose)
 
     for question, ground_truth in MATH_PROBLEMS:
         click.echo(f"\n{'=' * 60}")

@@ -14,6 +14,6 @@
 
 """Environments for strands-env."""
 
-from .simple_math_env import SimpleMathEnv
+from .calculator import CalculatorEnv
 
-__all__ = ["SimpleMathEnv"]
+__all__ = ["CalculatorEnv"]
