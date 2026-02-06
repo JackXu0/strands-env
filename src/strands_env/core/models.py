@@ -127,6 +127,7 @@ def bedrock_model_factory(
         model_id=model_id,
         boto_session=boto_session,
         boto_client_config=boto_client_config,
+        streaming=False,
         **sampling_params,
     )
 
