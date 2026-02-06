@@ -134,6 +134,14 @@ class Evaluator:
         if not self.keep_tokens:
             step_result.observation.tokens = None
         await env.cleanup()
+        logger.info(
+            f"[{action.task_context.id}]: "
+            f"message_count={len(step_result.observation.messages)} | "
+            f"reward={step_result.reward.reward:.2f} | "
+            f"label={action.task_context.ground_truth} | "
+            f"reward_info={step_result.reward.info} | "
+            f"per_tool_metrics={step_result.observation.metrics}"
+        )
         return EvalSample(action=action, step_result=step_result)
 
     async def run(self, actions: Iterable[Action]) -> dict[str, list[EvalSample]]:
