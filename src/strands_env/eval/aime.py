@@ -38,31 +38,25 @@ class AIMEEvaluator(Evaluator):
 
     @override
     def load_dataset(self) -> Iterable[Action]:
-        """Load AIME dataset from HuggingFace.
+        """Load AIME dataset from HuggingFace (streaming).
 
-        Returns:
-            Iterable of Action objects with problem text and ground truth.
+        Yields:
+            Action objects with problem text and ground truth.
         """
-        dataset = load_dataset(self.dataset_path, split="train")
+        dataset = load_dataset(self.dataset_path, split="train", streaming=True)
 
-        actions = []
         for i, row in enumerate(dataset):
             problem, answer = row.get("problem"), row.get("answer")
             if problem is None or answer is None:
                 logger.warning(f"Row {i}: missing problem/answer, skipped")
                 continue
-            actions.append(
-                Action(
-                    message=str(problem),
-                    task_context=TaskContext(
-                        id=f"{self.benchmark_name}_{row.get('id', i)}",
-                        ground_truth=str(answer),
-                    ),
-                )
+            yield Action(
+                message=str(problem),
+                task_context=TaskContext(
+                    id=f"{self.benchmark_name}_{row.get('id', i)}",
+                    ground_truth=str(answer),
+                ),
             )
-
-        logger.info(f"[{self.benchmark_name}] Loaded {len(actions)}/{len(dataset)} prompts")
-        return actions
 
 
 @register("aime-2024")
