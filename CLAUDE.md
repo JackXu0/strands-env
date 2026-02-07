@@ -110,3 +110,9 @@ The package lives in `src/strands_env/` with these modules:
 - Python 3.10+ required
 - asyncio_mode = "auto" for pytest-asyncio
 - Async-first: all Environment methods that interact with Agent are async
+
+## Releases
+
+- Do NOT push tags (`git push --tags`) - the user will create GitHub Releases manually to trigger PyPI CI/CD
+- When preparing a release: update version in `pyproject.toml`, commit, push code only
+- User creates the release on GitHub web UI which triggers the publish workflow
