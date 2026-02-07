@@ -27,7 +27,7 @@ import click
 from strands_env.eval import get_benchmark, list_benchmarks
 
 from .config import EnvConfig, EvalConfig, ModelConfig, SamplingConfig
-from .utils import build_model_factory, load_env_hook
+from .utils import build_model_factory, load_env_hook, load_evaluator_hook
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,15 @@ def list_cmd():
 
 
 @cli.command("eval")
-@click.argument("benchmark")
-# Hook file
+@click.argument("benchmark", required=False)
+# Hook files
+@click.option(
+    "--evaluator",
+    "evaluator_path",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to evaluator hook file (Python file exporting EvaluatorClass). Mutually exclusive with BENCHMARK.",
+)
 @click.option(
     "--env",
     "-e",
@@ -181,7 +188,8 @@ def list_cmd():
     help="Enable debug logging.",
 )
 def eval_cmd(
-    benchmark: str,
+    benchmark: str | None,
+    evaluator_path: Path | None,
     env_path: Path,
     # Model
     backend: Literal["sglang", "bedrock"],
@@ -209,20 +217,33 @@ def eval_cmd(
 ):
     """Run benchmark evaluation.
 
-    BENCHMARK is the name of the benchmark (e.g., 'aime').
+    BENCHMARK is the name of a registered benchmark (e.g., 'aime-2024').
+    Alternatively, use --evaluator to specify a custom evaluator hook file.
 
-    Example:
-        strands-env eval aime --env my_env.py --backend sglang --n-samples 8
+    Examples:
+        strands-env eval aime-2024 --env my_env.py --backend sglang
+        strands-env eval --evaluator my_evaluator.py --env my_env.py --backend sglang
     """
     # Setup logging
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-    # Validate benchmark first (fail fast)
-    try:
-        evaluator_cls = get_benchmark(benchmark)
-    except KeyError as e:
-        raise click.ClickException(str(e))
+    # Validate: either benchmark or evaluator_path, not both, not neither
+    if benchmark and evaluator_path:
+        raise click.ClickException("Cannot specify both BENCHMARK and --evaluator. Use one or the other.")
+    if not benchmark and not evaluator_path:
+        raise click.ClickException("Must specify either BENCHMARK or --evaluator.")
+
+    # Get evaluator class from registry or hook file
+    if benchmark:
+        try:
+            evaluator_cls = get_benchmark(benchmark)
+        except KeyError as e:
+            raise click.ClickException(str(e))
+        benchmark_name = benchmark
+    else:
+        evaluator_cls = load_evaluator_hook(evaluator_path)
+        benchmark_name = evaluator_cls.benchmark_name
 
     # Load hook file (validate before building model factory)
     env_factory_creator = load_env_hook(env_path)
@@ -264,17 +285,17 @@ def eval_cmd(
     env_factory = env_factory_creator(model_factory, env_config)
 
     # Get output paths based on benchmark name
-    output_dir = eval_config.get_output_dir(benchmark)
-    results_path = eval_config.get_results_path(benchmark)
-    metrics_path = eval_config.get_metrics_path(benchmark)
-    config_path = eval_config.get_config_path(benchmark)
+    output_dir = eval_config.get_output_dir(benchmark_name)
+    results_path = eval_config.get_results_path(benchmark_name)
+    metrics_path = eval_config.get_metrics_path(benchmark_name)
+    config_path = eval_config.get_config_path(benchmark_name)
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save config for reproducibility
     config_data = {
-        "benchmark": benchmark,
+        "benchmark": benchmark_name,
         "env_path": str(env_path),
         "model": model_config.to_dict(),
         "env": env_config.to_dict(),
@@ -298,7 +319,7 @@ def eval_cmd(
     actions = evaluator.load_dataset()
 
     # Run evaluation
-    click.echo(f"Running {benchmark} evaluation with {env_path}")
+    click.echo(f"Running {benchmark_name} evaluation with {env_path}")
     click.echo(f"  Backend: {backend}, Model: {model_id or '(auto-detect)'}")
     click.echo(f"  Samples per prompt: {n_samples_per_prompt}, Concurrency: {max_concurrency}")
     click.echo(f"  Output directory: {output_dir}")

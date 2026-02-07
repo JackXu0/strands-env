@@ -27,10 +27,13 @@ from strands_env.core.models import ModelFactory, bedrock_model_factory, sglang_
 from .config import EnvConfig, ModelConfig
 
 if TYPE_CHECKING:
-    from strands_env.eval import AsyncEnvFactory
+    from strands_env.eval import AsyncEnvFactory, Evaluator
 
 #: Type for the create_env_factory function exported by hook files.
 EnvFactoryCreator = Callable[[ModelFactory, EnvConfig], "AsyncEnvFactory"]
+
+#: Type for evaluator class.
+EvaluatorClass = type["Evaluator"]
 
 
 def build_model_factory(config: ModelConfig, max_concurrency: int) -> ModelFactory:
@@ -116,3 +119,48 @@ def load_env_hook(env_path: Path) -> EnvFactoryCreator:
         )
 
     return hook.create_env_factory
+
+
+def load_evaluator_hook(evaluator_path: Path) -> EvaluatorClass:
+    """Load evaluator hook file and return the Evaluator class.
+
+    The hook file must export an `EvaluatorClass` that extends `Evaluator`.
+
+    Args:
+        evaluator_path: Path to the Python hook file.
+
+    Returns:
+        The Evaluator subclass from the hook file.
+
+    Raises:
+        click.ClickException: If the file cannot be loaded or doesn't export the class.
+    """
+    from strands_env.eval import Evaluator
+
+    spec = importlib.util.spec_from_file_location("evaluator_hook", evaluator_path)
+    if spec is None or spec.loader is None:
+        raise click.ClickException(f"Could not load evaluator hook file: {evaluator_path}")
+
+    hook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hook)
+
+    if not hasattr(hook, "EvaluatorClass"):
+        raise click.ClickException(
+            "Evaluator hook file must export 'EvaluatorClass' (an Evaluator subclass).\n"
+            "Example:\n"
+            "  from strands_env.eval import Evaluator\n"
+            "\n"
+            "  class MyEvaluator(Evaluator):\n"
+            "      benchmark_name = 'my-benchmark'\n"
+            "\n"
+            "      def load_dataset(self):\n"
+            "          ...\n"
+            "\n"
+            "  EvaluatorClass = MyEvaluator"
+        )
+
+    evaluator_cls = hook.EvaluatorClass
+    if not isinstance(evaluator_cls, type) or not issubclass(evaluator_cls, Evaluator):
+        raise click.ClickException("EvaluatorClass must be a subclass of Evaluator")
+
+    return evaluator_cls

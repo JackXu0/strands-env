@@ -15,11 +15,16 @@ strands-env list
 ### Run Evaluation
 
 ```bash
+# Using a registered benchmark
 strands-env eval <benchmark> --env <hook_file> [options]
+
+# Using a custom evaluator hook
+strands-env eval --evaluator <evaluator_file> --env <hook_file> [options]
 ```
 
 **Required arguments:**
-- `<benchmark>` - Benchmark name (e.g., `aime-2024`, `aime-2025`)
+- `<benchmark>` - Benchmark name (e.g., `aime-2024`, `aime-2025`), OR
+- `--evaluator` - Path to evaluator hook file (mutually exclusive with benchmark)
 - `--env`, `-e` - Path to environment hook file
 
 **Model options:**
@@ -52,14 +57,11 @@ strands-env eval <benchmark> --env <hook_file> [options]
 ### Examples
 
 ```bash
-# Basic evaluation with SGLang
+# Using registered benchmark
 strands-env eval aime-2024 --env examples/envs/calculator_env.py --backend sglang
 
-# With Bedrock and assumed role
-strands-env eval aime-2024 --env examples/envs/code_sandbox_env.py \
-    --backend bedrock \
-    --model-id us.anthropic.claude-sonnet-4-20250514 \
-    --role-arn ...
+# Using custom evaluator hook
+strands-env eval --evaluator my_evaluator.py --env examples/envs/calculator_env.py --backend sglang
 
 # Pass@8 evaluation with high concurrency
 strands-env eval aime-2024 --env examples/envs/calculator_env.py \
@@ -147,9 +149,43 @@ def create_env_factory(model_factory: ModelFactory, env_config: EnvConfig):
 
 ## Custom Evaluators
 
-For custom benchmarks, subclass `Evaluator` and use the `@register` decorator.
+For custom benchmarks, subclass `Evaluator`. You can either register it with `@register` or use an evaluator hook file.
 
-### Creating an Evaluator
+### Evaluator Hook File
+
+Create a Python file that exports `EvaluatorClass`:
+
+```python
+# my_evaluator.py
+from collections.abc import Iterable
+
+from strands_env.core import Action, TaskContext
+from strands_env.eval import Evaluator
+
+class MyEvaluator(Evaluator):
+    benchmark_name = "my-benchmark"
+
+    def load_dataset(self) -> Iterable[Action]:
+        for item in load_my_data():
+            yield Action(
+                message=item["prompt"],
+                task_context=TaskContext(
+                    id=item["id"],
+                    ground_truth=item["answer"],
+                ),
+            )
+
+EvaluatorClass = MyEvaluator
+```
+
+Then run:
+```bash
+strands-env eval --evaluator my_evaluator.py --env my_env.py --backend sglang
+```
+
+### Registered Evaluator
+
+Alternatively, use `@register` to make it available by name:
 
 ```python
 from collections.abc import Iterable
@@ -193,17 +229,28 @@ async def run_evaluation():
 
 ### Custom Metrics
 
+Override `get_metric_fns()` to customize metrics:
+
 ```python
-from strands_env.eval import MetricFn, pass_at_k_metric
+from functools import partial
 
-def my_custom_metric(results: dict) -> dict:
-    """Custom metric function."""
-    return {"my_metric": compute_something(results)}
+from strands_env.eval import Evaluator, pass_at_k_metric
 
-evaluator = MyEvaluator(
-    env_factory=env_factory,
-    metric_fns=[pass_at_k_metric, my_custom_metric],
-)
+class MyEvaluator(Evaluator):
+    benchmark_name = "my-benchmark"
+
+    def load_dataset(self):
+        ...
+
+    def get_metric_fns(self):
+        # Include default pass@k plus custom metrics
+        return [
+            partial(pass_at_k_metric, k_values=[1, 5, 10], reward_threshold=1.0),
+            self.my_custom_metric,
+        ]
+
+    def my_custom_metric(self, results: dict) -> dict:
+        return {"my_metric": compute_something(results)}
 ```
 
 ## Output Files

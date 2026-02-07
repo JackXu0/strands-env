@@ -63,7 +63,6 @@ class Evaluator:
         output_path: Path | str = Path.cwd() / "results.jsonl",
         save_interval: int = 10,
         keep_tokens: bool = False,
-        metric_fns: list[MetricFn] = [],
     ):
         """Initialize the evaluator.
 
@@ -74,7 +73,6 @@ class Evaluator:
             output_path: Path to JSONL file for saving results. Enables resume.
             save_interval: Flush results to disk every N completed samples.
             keep_tokens: Keep token-level observation in results (only valid for `SGLangModel` backends).
-            metric_fns: Additional metric functions. `pass@k` is always included.
         """
         self.env_factory: AsyncEnvFactory = env_factory
         self.max_concurrency = max_concurrency
@@ -83,12 +81,6 @@ class Evaluator:
         self.save_interval = save_interval
         self.keep_tokens = keep_tokens
 
-        # Always include pass@k, then any additional metrics
-        self.metric_fns: list[MetricFn] = [
-            partial(pass_at_k_metric, k_values=list(range(1, n_samples_per_prompt + 1)), reward_threshold=1.0)
-        ]
-        self.metric_fns += metric_fns
-
         # Runtime state
         self.results: dict[str, list[EvalSample]] = defaultdict(list)
         self.completed_ids: set[str] = set()
@@ -96,6 +88,22 @@ class Evaluator:
     def load_dataset(self) -> Iterable[Action]:
         """Load dataset. Override in subclasses."""
         raise NotImplementedError("Subclasses must implement load_dataset()")
+
+    def get_metric_fns(self) -> list[MetricFn]:
+        """Return metric functions for evaluation. Override to customize.
+
+        By default, includes pass@k metric based on n_samples_per_prompt.
+
+        Returns:
+            List of metric functions.
+        """
+        return [
+            partial(
+                pass_at_k_metric,
+                k_values=list(range(1, self.n_samples_per_prompt + 1)),
+                reward_threshold=1.0,
+            )
+        ]
 
     def load_results(self) -> None:
         """Load completed samples from checkpoint file."""
@@ -201,7 +209,7 @@ class Evaluator:
             Dict mapping metric names to values.
         """
         metrics = {}
-        for fn in self.metric_fns:
+        for fn in self.get_metric_fns():
             metrics.update(fn(results))
 
         if log and metrics:
