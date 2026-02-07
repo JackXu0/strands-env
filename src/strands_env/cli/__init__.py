@@ -321,6 +321,7 @@ def eval_cmd(
     # Save config for reproducibility
     config_data = {
         "benchmark": benchmark_name,
+        "evaluator_path": str(evaluator_path) if evaluator_path else None,
         "env_path": str(env_path),
         "model": model_config.to_dict(),
         "env": {
