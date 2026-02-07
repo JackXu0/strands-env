@@ -61,6 +61,19 @@ class ModelConfig:
     # Sampling
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
 
+    def to_dict(self) -> dict:
+        """Convert to dict for serialization."""
+        return {
+            "backend": self.backend,
+            "base_url": self.base_url,
+            "tokenizer_path": self.tokenizer_path,
+            "model_id": self.model_id,
+            "region": self.region,
+            "profile_name": self.profile_name,
+            "role_arn": self.role_arn,
+            "sampling": self.sampling.to_dict(),
+        }
+
 
 @dataclass
 class EnvConfig:
@@ -76,6 +89,13 @@ class EnvConfig:
         if self.system_prompt_path is None:
             return None
         return self.system_prompt_path.read_text()
+
+    def to_dict(self) -> dict:
+        """Convert to dict for serialization."""
+        return {
+            "system_prompt_path": str(self.system_prompt_path) if self.system_prompt_path else None,
+            "max_tool_iterations": self.max_tool_iterations,
+        }
 
 
 @dataclass
@@ -101,3 +121,16 @@ class EvalConfig:
     def get_metrics_path(self, benchmark_name: str) -> Path:
         """Get path for metrics JSON file."""
         return self.get_output_dir(benchmark_name) / "metrics.json"
+
+    def get_config_path(self, benchmark_name: str) -> Path:
+        """Get path for config JSON file."""
+        return self.get_output_dir(benchmark_name) / "config.json"
+
+    def to_dict(self) -> dict:
+        """Convert to dict for serialization."""
+        return {
+            "n_samples_per_prompt": self.n_samples_per_prompt,
+            "max_concurrency": self.max_concurrency,
+            "save_interval": self.save_interval,
+            "keep_tokens": self.keep_tokens,
+        }

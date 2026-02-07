@@ -212,6 +212,7 @@ Evaluation results are saved to the output directory:
 
 ```
 {benchmark}_eval/
+├── config.json      # CLI configuration for reproducibility
 ├── results.jsonl    # Per-sample results (action, step_result, reward)
 └── metrics.json     # Aggregated metrics (pass@k, etc.)
 ```

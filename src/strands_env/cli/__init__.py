@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 from typing import Literal
@@ -266,9 +267,22 @@ def eval_cmd(
     output_dir = eval_config.get_output_dir(benchmark)
     results_path = eval_config.get_results_path(benchmark)
     metrics_path = eval_config.get_metrics_path(benchmark)
+    config_path = eval_config.get_config_path(benchmark)
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save config for reproducibility
+    config_data = {
+        "benchmark": benchmark,
+        "env_path": str(env_path),
+        "model": model_config.to_dict(),
+        "env": env_config.to_dict(),
+        "eval": eval_config.to_dict(),
+    }
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, indent=2)
+    click.echo(f"Saved config to {config_path}")
 
     # Create evaluator
     evaluator = evaluator_cls(
@@ -293,8 +307,6 @@ def eval_cmd(
     metrics = evaluator.compute_metrics(results)
 
     # Save metrics to JSON
-    import json
-
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
     click.echo(f"Saved metrics to {metrics_path}")
