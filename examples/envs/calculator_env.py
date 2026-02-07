@@ -1,8 +1,4 @@
-"""Example environment hook for AIME evaluation with CalculatorEnv.
-
-Usage:
-    strands-env eval aime --env examples/envs/calculator_env.py --n-samples 8
-"""
+"""Example environment hook for math reasoning evaluation with `CalculatorEnv`."""
 
 from strands_env.cli.config import EnvConfig
 from strands_env.core.models import ModelFactory

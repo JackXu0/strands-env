@@ -1,12 +1,4 @@
-"""Example environment hook for AIME evaluation with CodeSandboxEnv.
-
-Usage:
-    strands-env eval aime \
-        --env examples/envs/code_sandbox_env.py \
-        --backend bedrock \
-        --model-id anthropic.claude-v2 \
-        --region us-east-1
-"""
+"""Example environment hook for math reasoning evaluation with `CodeSandboxEnv`."""
 
 from strands_env.cli.config import EnvConfig
 from strands_env.core.models import ModelFactory
