@@ -19,7 +19,6 @@ from strands_env.core.models import (
 class TestSGLangModelFactory:
     def test_returns_callable(self):
         factory = sglang_model_factory(
-            model_id="test-model",
             tokenizer=MagicMock(),
             client=MagicMock(spec=SGLangClient),
         )
@@ -29,7 +28,6 @@ class TestSGLangModelFactory:
         tokenizer = MagicMock()
         client = MagicMock(spec=SGLangClient)
         factory = sglang_model_factory(
-            model_id="Qwen/Qwen3-8B",
             tokenizer=tokenizer,
             client=client,
             sampling_params={"max_new_tokens": 1024},
@@ -42,7 +40,6 @@ class TestSGLangModelFactory:
 
     def test_each_call_creates_new_instance(self):
         factory = sglang_model_factory(
-            model_id="test-model",
             tokenizer=MagicMock(),
             client=MagicMock(spec=SGLangClient),
         )

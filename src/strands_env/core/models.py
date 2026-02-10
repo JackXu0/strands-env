@@ -64,33 +64,32 @@ DEFAULT_SAMPLING_PARAMS = {"max_new_tokens": 16384, "temperature": 1.0, "top_p":
 
 def sglang_model_factory(
     *,
-    model_id: str,
-    tokenizer: PreTrainedTokenizerBase,
     client: SGLangClient,
+    tokenizer: PreTrainedTokenizerBase,
     tool_parser: ToolParser | None = None,
     sampling_params: dict[str, Any] = DEFAULT_SAMPLING_PARAMS,
+    return_logprob: bool = True,
     enable_thinking: bool | None = None,
 ) -> ModelFactory:
     """Return a factory that creates `SGLangModel` instances.
 
     Args:
-        model_id: SGLang model identifier.
-        tokenizer: HuggingFace tokenizer for chat template and tokenization.
         client: `SGLangClient` for HTTP communication with the SGLang server.
+        tokenizer: HuggingFace tokenizer for chat template and tokenization.
         tool_parser: Tool parser for extracting tool calls from model output. Defaults to `HermesToolParser`.
         sampling_params: Sampling parameters for the model (e.g. `{"max_new_tokens": 4096}`).
+        return_logprob: Whether to return logprobs for each token.
         enable_thinking: Enable thinking mode for Qwen3 hybrid models.
     """
     if tool_parser is None:
         tool_parser = HermesToolParser()
 
     return lambda: SGLangModel(
-        tokenizer=tokenizer,
         client=client,
+        tokenizer=tokenizer,
         tool_parser=tool_parser,
-        params=sampling_params,
-        model_id=model_id,
-        return_logprobs=True,
+        sampling_params=sampling_params,
+        return_logprob=return_logprob,
         enable_thinking=enable_thinking,
     )
 

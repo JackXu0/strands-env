@@ -244,24 +244,22 @@ def build_model_factory(config: ModelConfig, max_concurrency: int) -> ModelFacto
 
 def _build_sglang_model_factory(config: ModelConfig, max_concurrency: int, sampling: dict) -> ModelFactory:
     """Build SGLang model factory."""
-    from strands_env.utils.sglang import (
-        check_server_health,
-        get_cached_client,
-        get_cached_tokenizer,
-        get_model_id,
-    )
+    import asyncio
 
-    # Check server health before proceeding
-    try:
-        check_server_health(config.base_url)
-    except ConnectionError as e:
-        raise click.ClickException(str(e))
+    from strands_env.utils.sglang import get_cached_client, get_cached_tokenizer
 
     client = get_cached_client(config.base_url, max_concurrency)
 
+    # Check server health before proceeding
+    try:
+        if not asyncio.run(client.health()):
+            raise ConnectionError(f"SGLang server at {config.base_url} is not healthy")
+    except Exception as e:
+        raise click.ClickException(f"SGLang server at {config.base_url} is not reachable: {e}")
+
     # Resolve and backfill model_id/tokenizer_path for reproducibility
     if not config.model_id:
-        config.model_id = get_model_id(config.base_url)
+        config.model_id = asyncio.run(client.get_model_info())["model_path"]
     if not config.tokenizer_path:
         config.tokenizer_path = config.model_id
 
@@ -270,7 +268,6 @@ def _build_sglang_model_factory(config: ModelConfig, max_concurrency: int, sampl
 
     return sglang_model_factory(
         client=client,
-        model_id=config.model_id,
         tokenizer=tokenizer,
         tool_parser=tool_parser,
         sampling_params=sampling,

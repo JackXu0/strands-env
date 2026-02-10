@@ -9,7 +9,8 @@ Configuration (priority: CLI > env var > default):
     SGLANG_BASE_URL=http://... pytest tests/integration/
 """
 
-import httpx
+import asyncio
+
 import pytest
 from strands_sglang import SGLangClient
 from transformers import AutoTokenizer
@@ -29,22 +30,19 @@ def sglang_base_url(request):
 @pytest.fixture(scope="session")
 def sglang_client(sglang_base_url):
     """Shared SGLang client for connection pooling. Skips all tests if server is unreachable."""
+    client = SGLangClient(sglang_base_url)
     try:
-        response = httpx.get(f"{sglang_base_url}/health", timeout=5)
-        healthy = response.status_code == 200
-    except httpx.HTTPError:
-        healthy = False
-    if not healthy:
+        if not asyncio.run(client.health()):
+            pytest.skip(f"SGLang server at {sglang_base_url} is not healthy")
+    except Exception:
         pytest.skip(f"SGLang server not reachable at {sglang_base_url}")
-    return SGLangClient(sglang_base_url)
+    return client
 
 
 @pytest.fixture(scope="session")
-def sglang_model_id(sglang_base_url, sglang_client):
+def sglang_model_id(sglang_client):
     """Auto-detect model ID from the running SGLang server."""
-    response = httpx.get(f"{sglang_base_url}/get_model_info", timeout=5)
-    response.raise_for_status()
-    return response.json()["model_path"]
+    return asyncio.run(sglang_client.get_model_info())["model_path"]
 
 
 @pytest.fixture(scope="session")
@@ -54,10 +52,9 @@ def tokenizer(sglang_model_id):
 
 
 @pytest.fixture
-def model_factory(tokenizer, sglang_client, sglang_model_id):
+def model_factory(tokenizer, sglang_client):
     """Model factory for Environment integration tests."""
     return sglang_model_factory(
-        model_id=sglang_model_id,
         tokenizer=tokenizer,
         client=sglang_client,
         sampling_params=DEFAULT_SAMPLING_PARAMS,
