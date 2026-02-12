@@ -55,7 +55,8 @@ from transformers import PreTrainedTokenizerBase
 #: Factory that produces a fresh `Model` per step (for concurrent step isolation).
 ModelFactory = Callable[[], Model]
 
-DEFAULT_SAMPLING_PARAMS = {"max_new_tokens": 16384, "temperature": 1.0, "top_p": 1.0}
+# Other parameters like temperature and top_p will be set to model's default values if provided
+DEFAULT_SAMPLING_PARAMS = {"max_new_tokens": 16384}
 
 # ---------------------------------------------------------------------------
 # SGLang Model
