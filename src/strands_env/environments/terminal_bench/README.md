@@ -13,7 +13,7 @@ A Docker-based environment for [Terminal-Bench](https://github.com/terminal-benc
    ```bash
    pip install -r requirements.txt
    ```
-   This installs [Harbor](https://pypi.org/project/harbor/) (`harbor==0.1.43`) for Docker environment management.
+   This installs [Harbor](https://pypi.org/project/harbor/) (`harbor>=0.1.43`) for Docker environment management.
 
 3. **Task data** — Each task requires a directory with:
    ```
@@ -38,7 +38,7 @@ config = TerminalBenchConfig(
 env = TerminalBenchEnv(model_factory=model_factory, config=config)
 
 await env.reset()       # Build and start Docker container
-result = await env.step(action)
+result = await env.step(action)  # action.message = task.instruction
 await env.cleanup()     # Stop and delete container
 ```
 
