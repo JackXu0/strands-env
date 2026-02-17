@@ -74,7 +74,7 @@ class CodeSandboxEnv(Environment):
         model_factory: ModelFactory,
         system_prompt: str | None = None,
         reward_fn: RewardFunction | None = None,
-        max_tool_iterations: int | None = 10,
+        max_tool_iters: int | None = 10,
         max_tool_calls: int | None = 50,
         verbose: bool = False,
         boto3_session: boto3.Session | None = None,
@@ -84,7 +84,7 @@ class CodeSandboxEnv(Environment):
             model_factory=model_factory,
             reward_fn=reward_fn,
             system_prompt=system_prompt,
-            max_tool_iterations=max_tool_iterations,
+            max_tool_iters=max_tool_iters,
             max_tool_calls=max_tool_calls,
             verbose=verbose,
         )

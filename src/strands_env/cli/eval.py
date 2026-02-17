@@ -158,10 +158,16 @@ def list_cmd():
     help="Path to system prompt file (overrides environment default).",
 )
 @click.option(
-    "--max-tool-iterations",
+    "--max-tool-iters",
     type=int,
-    default=10,
+    default=None,
     help="Maximum tool iterations per step.",
+)
+@click.option(
+    "--max-tool-calls",
+    type=int,
+    default=None,
+    help="Maximum tool calls per step.",
 )
 # Eval settings
 @click.option(
@@ -222,7 +228,8 @@ def run_cmd(
     top_k: int | None,
     # Environment
     system_prompt: Path | None,
-    max_tool_iterations: int,
+    max_tool_iters: int | None,
+    max_tool_calls: int | None,
     # Eval
     n_samples_per_prompt: int,
     max_concurrency: int,
@@ -284,7 +291,8 @@ def run_cmd(
     )
     env_config = EnvConfig(
         system_prompt_path=system_prompt,
-        max_tool_iterations=max_tool_iterations,
+        max_tool_iters=max_tool_iters,
+        max_tool_calls=max_tool_calls,
         verbose=False,  # Always False for eval
     )
     eval_config = EvalConfig(
@@ -343,7 +351,8 @@ def run_cmd(
         "model": model_config.to_dict(),
         "env": {
             "system_prompt": resolved_system_prompt,
-            "max_tool_iterations": env_config.max_tool_iterations,
+            "max_tool_iters": env_config.max_tool_iters,
+            "max_tool_calls": env_config.max_tool_calls,
         },
         "eval": eval_config.to_dict(),
     }

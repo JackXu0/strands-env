@@ -43,7 +43,7 @@ def env(model_factory):
 class TestEnvironmentInit:
     def test_defaults(self, model_factory):
         env = Environment(model_factory=model_factory)
-        assert env.max_tool_iterations is None
+        assert env.max_tool_iters is None
         assert env.max_tool_calls is None
         assert env.verbose is False
         assert env.system_prompt is None

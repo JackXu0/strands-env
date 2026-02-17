@@ -50,13 +50,13 @@ class Environment:
         model_factory: ModelFactory,
         system_prompt: str | None = None,
         reward_fn: RewardFunction | None = None,
-        max_tool_iterations: int | None = None,
+        max_tool_iters: int | None = None,
         max_tool_calls: int | None = None,
         verbose: bool = False,
     ):
         self.model_factory = model_factory
         self.reward_fn = reward_fn
-        self.max_tool_iterations = max_tool_iterations
+        self.max_tool_iters = max_tool_iters
         self.max_tool_calls = max_tool_calls
         self.verbose = verbose
 
@@ -71,7 +71,7 @@ class Environment:
         """Run one agent episode and return observation + reward + termination."""
         conversation_history = action.task_context.conversation_history
         tool_limiter = ToolLimiter(
-            max_tool_iters=self.max_tool_iterations,
+            max_tool_iters=self.max_tool_iters,
             max_tool_calls=self.max_tool_calls,
         )
         model = self.model_factory()

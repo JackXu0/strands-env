@@ -52,7 +52,8 @@ strands-env eval run --evaluator <evaluator_file> --env <hook_file> [options]
 
 **Other options:**
 - `--system-prompt` - Path to system prompt file
-- `--max-tool-iterations` - Maximum tool iterations per step (default: 10)
+- `--max-tool-iters` - Maximum tool iterations per step (default: None)
+- `--max-tool-calls` - Maximum tool calls per step (default: None)
 - `--debug` - Enable debug logging
 
 ### Examples
@@ -107,7 +108,7 @@ def create_env_factory(model_factory: ModelFactory, env_config: EnvConfig):
         return YourEnvironment(
             model_factory=model_factory,
             system_prompt=env_config.system_prompt,
-            max_tool_iterations=env_config.max_tool_iterations,
+            max_tool_iters=env_config.max_tool_iters,
         )
 
     return env_factory
@@ -130,7 +131,7 @@ def create_env_factory(model_factory: ModelFactory, env_config: EnvConfig):
             model_factory=model_factory,
             reward_fn=reward_fn,
             system_prompt=env_config.system_prompt,
-            max_tool_iterations=env_config.max_tool_iterations,
+            max_tool_iters=env_config.max_tool_iters,
         )
 
     return env_factory
@@ -153,7 +154,7 @@ def create_env_factory(model_factory: ModelFactory, env_config: EnvConfig):
             model_factory=model_factory,
             reward_fn=reward_fn,
             system_prompt=env_config.system_prompt,
-            max_tool_iterations=env_config.max_tool_iterations,
+            max_tool_iters=env_config.max_tool_iters,
             mode=CodeMode.CODE,
         )
 

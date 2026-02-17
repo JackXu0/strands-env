@@ -90,14 +90,14 @@ class TestMathEnvironment:
         assert "output_tokens" in metrics
 
     async def test_tool_iteration_limit(self, model_factory):
-        """Environment respects max_tool_iterations."""
+        """Environment respects max_tool_iters."""
         env = MathEnvironment(
             model_factory=model_factory,
             system_prompt=(
                 "You are a math assistant. Use the calculator tool for every single step. "
                 "Break every problem into many small steps, each requiring a separate calculator call."
             ),
-            max_tool_iterations=1,
+            max_tool_iters=1,
         )
         action = Action(message="Compute 1+1, then 2+2, then 3+3, then 4+4, then 5+5 one at a time.")
         result = await env.step(action)

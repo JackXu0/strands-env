@@ -82,7 +82,8 @@ class EnvConfig:
     """Environment configuration."""
 
     system_prompt_path: Path | None = None
-    max_tool_iterations: int = 10
+    max_tool_iters: int | None = None
+    max_tool_calls: int | None = None
     verbose: bool = False
 
     @property
@@ -96,7 +97,8 @@ class EnvConfig:
         """Convert to dict for serialization."""
         return {
             "system_prompt": self.system_prompt,  # Save actual content for reproducibility
-            "max_tool_iterations": self.max_tool_iterations,
+            "max_tool_iters": self.max_tool_iters,
+            "max_tool_calls": self.max_tool_calls,
         }
 
 

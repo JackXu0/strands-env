@@ -69,7 +69,7 @@ class TerminalBenchEnv(Environment):
         config: TerminalBenchConfig,
         system_prompt: str | None = None,
         reward_fn: RewardFunction | None = None,
-        max_tool_iterations: int | None = 25,
+        max_tool_iters: int | None = 25,
         max_tool_calls: int | None = None,
         verbose: bool = False,
     ):
@@ -77,7 +77,7 @@ class TerminalBenchEnv(Environment):
             model_factory=model_factory,
             system_prompt=system_prompt,
             reward_fn=None,
-            max_tool_iterations=max_tool_iterations,
+            max_tool_iters=max_tool_iters,
             max_tool_calls=max_tool_calls,
             verbose=verbose,
         )

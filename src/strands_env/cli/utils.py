@@ -91,7 +91,8 @@ def load_env_hook(path: Path) -> EnvFactoryCreator:
             "          return MyEnv(\n"
             "              model_factory=model_factory,\n"
             "              system_prompt=env_config.system_prompt,\n"
-            "              max_tool_iterations=env_config.max_tool_iterations,\n"
+            "              max_tool_iters=env_config.max_tool_iters,\n"
+            "              max_tool_calls=env_config.max_tool_calls,\n"
             "          )\n"
             "      return env_factory"
         )
