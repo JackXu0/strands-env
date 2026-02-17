@@ -1,6 +1,6 @@
 # Terminal-Bench Environment
 
-A Docker-based environment for [Terminal-Bench 2.0](https://github.com/terminal-bench/terminal-bench) task evaluation. Each task runs in an isolated Docker container where the agent executes shell commands to solve Linux administration and DevOps challenges.
+A Docker-based environment for [Terminal-Bench](https://github.com/terminal-bench/terminal-bench) task evaluation. Each task runs in an isolated Docker container where the agent executes shell commands to solve Linux administration and DevOps challenges.
 
 ## Setup
 
