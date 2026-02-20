@@ -94,7 +94,12 @@ class LLMJudgeReward(RewardFunction):
 
     @override
     async def compute(self, action: Action, step_result: StepResult) -> RewardResult:
-        prompt = await self.get_judge_prompt(action, step_result)
+        try:
+            prompt = await self.get_judge_prompt(action, step_result)
+        except Exception as e:
+            logger.error(f"Judge prompt rendering failed: {e}")
+            return RewardResult(reward=self.default_reward, info={"reason": "prompt_error", "error": str(e)})
+
         agent = Agent(model=self.judge_model, system_prompt=self.system_prompt, tools=[])
 
         try:
@@ -106,19 +111,14 @@ class LLMJudgeReward(RewardFunction):
                 result = await agent.invoke_async(prompt)
                 judgment = result.message.get("content", [{}])[0].get("text", "")
         except Exception as e:
-            logger.error(f"Judge failed: {e}")
+            logger.error(f"Judge model invocation failed: {e}")
             return RewardResult(reward=self.default_reward, info={"reason": "judge_error", "error": str(e)})
 
         try:
             reward = await self.get_reward(judgment)
         except Exception as e:
-            logger.error(f"Reward mapper failed: {e}")
-            info = {"reason": "mapper_error", "error": str(e)}
-            if isinstance(judgment, BaseModel):
-                info["judgment"] = judgment.model_dump()
-            else:
-                info["judgment"] = judgment
-            return RewardResult(reward=self.default_reward, info=info)
+            logger.error(f"Reward computation for judgment failed: {e}")
+            return RewardResult(reward=self.default_reward, info={"reason": "reward_error", "error": str(e)})
 
         if isinstance(judgment, BaseModel):
             return RewardResult(reward=reward, info={"judgment": judgment.model_dump()})
