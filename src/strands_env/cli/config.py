@@ -82,6 +82,7 @@ class EnvConfig:
     def to_dict(self) -> dict:
         """Convert to dict for serialization."""
         d = dataclasses.asdict(self)
+        d["system_prompt_path"] = str(self.system_prompt_path) if self.system_prompt_path else None
         d["system_prompt"] = self.system_prompt  # Save actual content for reproducibility
         return d
 
@@ -104,4 +105,6 @@ class EvalConfig:
 
     def to_dict(self) -> dict:
         """Convert to dict for serialization."""
-        return dataclasses.asdict(self)
+        d = dataclasses.asdict(self)
+        d["output_dir"] = str(self.output_dir) if self.output_dir else None
+        return d
