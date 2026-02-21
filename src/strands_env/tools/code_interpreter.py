@@ -68,8 +68,6 @@ class CodeInterpreterToolkit:
         self._session_id: str | None = None
         # Adding a session lock here to make sure each CodeInterpreterToolkit only owns one session.
         self._session_lock = asyncio.Lock()
-        self._execute_code = self._create_execute_code_tool()
-        self._execute_command = self._create_execute_command_tool()
 
     async def _get_session_id(self) -> str:
         """Get or create a code interpreter session (async, thread-safe)."""
@@ -130,72 +128,45 @@ class CodeInterpreterToolkit:
         # No result found - return collected errors or generic message
         return "\n".join(errors) if errors else "No result received"
 
-    def _create_execute_code_tool(self):
-        """Create execute_code tool."""
-        client = self._client
-        get_session_id = self._get_session_id
-        parse_fn = self._parse_stream_response
+    @tool
+    async def execute_code(self, code: str) -> str:
+        """Execute Python code and return the result.
 
-        @tool
-        async def execute_code(code: str) -> str:
-            """Execute Python code and return the result.
+        Args:
+            code: The Python code to execute.
 
-            Args:
-                code: The Python code to execute.
+        Returns:
+            Execution output text or error message.
+        """
+        session_id = await self._get_session_id()
+        response = await asyncio.to_thread(
+            self._client.invoke_code_interpreter,
+            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+            sessionId=session_id,
+            name="executeCode",
+            arguments={"code": code, "language": "python"},
+        )
+        return self._parse_stream_response(response)
 
-            Returns:
-                Execution output text or error message.
-            """
-            session_id = await get_session_id()
-            response = await asyncio.to_thread(
-                client.invoke_code_interpreter,
-                codeInterpreterIdentifier=CODE_INTERPRETER_ID,
-                sessionId=session_id,
-                name="executeCode",
-                arguments={"code": code, "language": "python"},
-            )
+    @tool
+    async def execute_command(self, command: str) -> str:
+        """Execute a shell command and return the result.
 
-            return parse_fn(response)
+        Args:
+            command: The shell command to execute.
 
-        return execute_code
-
-    def _create_execute_command_tool(self):
-        """Create execute_command tool."""
-        client = self._client
-        get_session_id = self._get_session_id
-        parse_fn = self._parse_stream_response
-
-        @tool
-        async def execute_command(command: str) -> str:
-            """Execute a shell command and return the result.
-
-            Args:
-                command: The shell command to execute.
-
-            Returns:
-                Execution output text or error message.
-            """
-            session_id = await get_session_id()
-            response = await asyncio.to_thread(
-                client.invoke_code_interpreter,
-                codeInterpreterIdentifier=CODE_INTERPRETER_ID,
-                sessionId=session_id,
-                name="executeCommand",
-                arguments={"command": command},
-            )
-            return parse_fn(response)
-
-        return execute_command
-
-    @property
-    def execute_code(self):
-        """Get the execute_code tool."""
-        return self._execute_code
-
-    @property
-    def execute_command(self):
-        """Get the execute_command tool."""
-        return self._execute_command
+        Returns:
+            Execution output text or error message.
+        """
+        session_id = await self._get_session_id()
+        response = await asyncio.to_thread(
+            self._client.invoke_code_interpreter,
+            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+            sessionId=session_id,
+            name="executeCommand",
+            arguments={"command": command},
+        )
+        return self._parse_stream_response(response)
 
     def cleanup(self) -> None:
         """Clean up code interpreter session."""
