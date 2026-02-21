@@ -82,16 +82,16 @@ class GoogleSearchToolkit:
 
     @tool
     async def google_search(self, query: str, top_k: int = 5) -> str:
-        f"""Search the web using Google Custom Search.
+        """Search the web using Google Custom Search.
 
         Args:
             query: The search query.
-            top_k: Number of results to return (max {MAX_RESULTS}).
+            top_k: Number of results to return (max 10).
 
         Returns:
             Search results with title, URL, and snippet for each result.
         """
-        logger.info(f"[google_search] query={query}, num_results={top_k}")
+        logger.info(f"[google_search] query={query}, top_k={top_k}")
 
         top_k = min(top_k, MAX_RESULTS)
 
