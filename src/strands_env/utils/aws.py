@@ -91,8 +91,3 @@ def check_credentials(session: boto3.Session) -> bool:
         return True
     except Exception:
         return False
-
-
-def clear_session_cache() -> None:
-    """Clear all cached boto3 sessions."""
-    get_session.cache_clear()

@@ -172,19 +172,3 @@ class TestCheckCredentials:
         mock_session = MagicMock()
         mock_session.client.return_value.get_caller_identity.side_effect = Exception("NoCredentials")
         assert check_credentials(mock_session) is False
-
-
-class TestClearSessionCache:
-    """Tests for clear_session_cache."""
-
-    def test_clears_cache(self):
-        """Should clear the session cache."""
-        # Create a cached session
-        session1 = get_session(region="us-east-1")
-
-        # Clear
-        clear_session_cache()
-
-        # New call should create new session
-        session2 = get_session(region="us-east-1")
-        assert session1 is not session2
