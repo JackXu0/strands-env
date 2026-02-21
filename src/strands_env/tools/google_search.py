@@ -80,72 +80,58 @@ class GoogleSearchToolkit:
         self.api_key = api_key or os.environ["GOOGLE_API_KEY"]
         self.search_engine_id = search_engine_id or os.environ["GOOGLE_CSE_ID"]
         self.timeout = timeout
-        self._google_search = self._create_google_search_tool()
 
-    def _create_google_search_tool(self):
-        """Create google_search tool."""
-        api_key = self.api_key
-        search_engine_id = self.search_engine_id
-        timeout = self.timeout
+    @tool
+    async def google_search(self, query: str, num_results: int = 5) -> str:
+        """Search the web using Google Custom Search.
 
-        @tool
-        async def google_search(query: str, num_results: int = 5) -> str:
-            """Search the web using Google Custom Search.
+        Args:
+            query: The search query.
+            num_results: Number of results to return (max 10).
 
-            Args:
-                query: The search query.
-                num_results: Number of results to return (max 10).
+        Returns:
+            JSON with search results containing title, url, and snippet.
+        """
+        logger.info(f"[google_search] query={query}, num_results={num_results}")
 
-            Returns:
-                JSON with search results containing title, url, and snippet.
-            """
-            logger.info(f"[google_search] query={query}, num_results={num_results}")
+        num_results = min(num_results, MAX_RESULTS)
 
-            num_results = min(num_results, MAX_RESULTS)
+        params = {
+            "key": self.api_key,
+            "cx": self.search_engine_id,
+            "q": query,
+            "num": num_results,
+        }
 
-            params = {
-                "key": api_key,
-                "cx": search_engine_id,
-                "q": query,
-                "num": num_results,
-            }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    _GOOGLE_SEARCH_API_URL,
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
+                ) as response:
+                    response.raise_for_status()
+                    data = await response.json()
 
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        _GOOGLE_SEARCH_API_URL,
-                        params=params,
-                        timeout=aiohttp.ClientTimeout(total=timeout),
-                    ) as response:
-                        response.raise_for_status()
-                        data = await response.json()
+            results = {}
+            for i, item in enumerate(data.get("items", []), 1):
+                title = item.get("title") or f"Result {i}"
+                snippet = item.get("snippet", "")
+                if len(snippet) > 500:
+                    snippet = snippet[:500] + "..."
+                results[f"{i}. {title}"] = {
+                    "url": item.get("link", ""),
+                    "snippet": snippet,
+                }
 
-                results = {}
-                for i, item in enumerate(data.get("items", []), 1):
-                    title = item.get("title") or f"Result {i}"
-                    snippet = item.get("snippet", "")
-                    if len(snippet) > 500:
-                        snippet = snippet[:500] + "..."
-                    results[f"{i}. {title}"] = {
-                        "url": item.get("link", ""),
-                        "snippet": snippet,
-                    }
+            return json.dumps({"GoogleSearchResult": results}, indent=4)
 
-                return json.dumps({"GoogleSearchResult": results}, indent=4)
-
-            except TimeoutError:
-                logger.error(f"[google_search] timeout for query: {query}")
-                return json.dumps({"GoogleSearchResult": {"Error": "Request timeout"}})
-            except aiohttp.ClientResponseError as e:
-                logger.error(f"[google_search] HTTP error: {e}")
-                return json.dumps({"GoogleSearchResult": {"Error": f"HTTP error: {e.status}"}})
-            except Exception as e:
-                logger.error(f"[google_search] error: {e}")
-                return json.dumps({"GoogleSearchResult": {"Error": str(e)}})
-
-        return google_search
-
-    @property
-    def google_search(self):
-        """Get the google_search tool."""
-        return self._google_search
+        except TimeoutError:
+            logger.error(f"[google_search] timeout for query: {query}")
+            return json.dumps({"GoogleSearchResult": {"Error": "Request timeout"}})
+        except aiohttp.ClientResponseError as e:
+            logger.error(f"[google_search] HTTP error: {e}")
+            return json.dumps({"GoogleSearchResult": {"Error": f"HTTP error: {e.status}"}})
+        except Exception as e:
+            logger.error(f"[google_search] error: {e}")
+            return json.dumps({"GoogleSearchResult": {"Error": str(e)}})
