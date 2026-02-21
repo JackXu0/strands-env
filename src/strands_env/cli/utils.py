@@ -247,7 +247,9 @@ def build_model_factory(config: ModelConfig, max_concurrency: int) -> ModelFacto
 
 def _build_sglang_model_factory(config: ModelConfig, max_concurrency: int, sampling: dict) -> ModelFactory:
     """Build SGLang model factory."""
-    from strands_env.utils.sglang import check_server_health, get_cached_client, get_cached_tokenizer, get_model_id
+    from strands_sglang import get_client, get_tokenizer
+
+    from strands_env.utils.sglang import check_server_health, get_model_id
 
     # Check server health before proceeding
     try:
@@ -255,7 +257,7 @@ def _build_sglang_model_factory(config: ModelConfig, max_concurrency: int, sampl
     except ConnectionError as e:
         raise click.ClickException(str(e))
 
-    client = get_cached_client(config.base_url, max_concurrency)
+    client = get_client(config.base_url, max_connections=max_concurrency)
 
     # Resolve and backfill model_id/tokenizer_path for reproducibility
     if not config.model_id:
@@ -263,7 +265,7 @@ def _build_sglang_model_factory(config: ModelConfig, max_concurrency: int, sampl
     if not config.tokenizer_path:
         config.tokenizer_path = config.model_id
 
-    tokenizer = get_cached_tokenizer(config.tokenizer_path)
+    tokenizer = get_tokenizer(config.tokenizer_path)
     tool_parser = load_tool_parser(config.tool_parser)
 
     return sglang_model_factory(
