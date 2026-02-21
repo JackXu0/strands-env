@@ -73,34 +73,34 @@ class GoogleSearchToolkit:
         """Initialize Google Search Toolkit.
 
         Args:
-            api_key: Google Custom Search API key. Falls back to GOOGLE_API_KEY env var.
-            search_engine_id: Custom Search Engine ID (cx). Falls back to GOOGLE_CSE_ID env var.
+            api_key: Google Custom Search API key. Falls back to `GOOGLE_API_KEY` env var.
+            search_engine_id: Custom Search Engine ID (cx). Falls back to `GOOGLE_CSE_ID` env var.
             timeout: Request timeout in seconds.
         """
-        self.api_key = api_key or os.environ["GOOGLE_API_KEY"]
-        self.search_engine_id = search_engine_id or os.environ["GOOGLE_CSE_ID"]
+        self.api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+        self.search_engine_id = search_engine_id or os.environ.get("GOOGLE_CSE_ID")
         self.timeout = timeout
 
     @tool
-    async def google_search(self, query: str, num_results: int = 5) -> str:
-        """Search the web using Google Custom Search.
+    async def google_search(self, query: str, top_k: int = 5) -> str:
+        f"""Search the web using Google Custom Search.
 
         Args:
             query: The search query.
-            num_results: Number of results to return (max 10).
+            top_k: Number of results to return (max {MAX_RESULTS}).
 
         Returns:
             JSON with search results containing title, url, and snippet.
         """
-        logger.info(f"[google_search] query={query}, num_results={num_results}")
+        logger.info(f"[google_search] query={query}, num_results={top_k}")
 
-        num_results = min(num_results, MAX_RESULTS)
+        top_k = min(top_k, MAX_RESULTS)
 
         params = {
             "key": self.api_key,
             "cx": self.search_engine_id,
             "q": query,
-            "num": num_results,
+            "num": top_k,
         }
 
         try:
