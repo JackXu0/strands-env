@@ -12,47 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration tests for WebSearchToolkit.
+"""Integration tests for WebSearchEnv.
 
-Requires provider credentials via env vars:
-    Serper: SERPER_API_KEY
-    Google: GOOGLE_API_KEY + GOOGLE_CSE_ID (deprecated in 2027)
-
-Tests for each provider are skipped if the required env vars are not set.
+Requires:
+    - A running SGLang server (auto-skipped if unreachable)
+    - SERPER_API_KEY env var for Serper provider tests
+    - GOOGLE_API_KEY + GOOGLE_CSE_ID env vars for Google provider tests
 """
 
 import os
-import re
 
 import pytest
 
-from strands_env.tools import WebSearchToolkit
-
-_AUTH_ERROR_RE = re.compile(r"Search failed: (401|403)")
-
-
-def _skip_on_auth_error(result: str) -> str:
-    """Skip the test if the search result indicates invalid credentials."""
-    if _AUTH_ERROR_RE.search(result):
-        pytest.skip(f"Credentials rejected by API: {result}")
-    return result
-
+from strands_env.core.types import Action, TerminationReason
+from strands_env.environments.web_search import ScrapeConfig, SearchConfig, WebSearchEnv
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-async def toolkit():
-    """WebSearchToolkit with default config; cleans up session after test."""
-    tk = WebSearchToolkit()
-    yield tk
-    await tk.cleanup()
-
-
-# ---------------------------------------------------------------------------
-# Serper
+# Skip markers
 # ---------------------------------------------------------------------------
 
 serper_available = pytest.mark.skipif(
@@ -60,64 +36,90 @@ serper_available = pytest.mark.skipif(
     reason="SERPER_API_KEY not set",
 )
 
-
-@serper_available
-class TestSerperSearch:
-    async def test_basic_search(self, toolkit):
-        result = _skip_on_auth_error(await toolkit.serper_search("Python programming", top_k=3))
-        assert "Search failed" not in result
-        assert "1." in result
-
-    async def test_blocked_domains(self):
-        tk = WebSearchToolkit(blocked_domains=["example.com"])
-        result = _skip_on_auth_error(await tk.serper_search("example.com test", top_k=3))
-        assert "Search failed" not in result
-        await tk.cleanup()
-
-
-# ---------------------------------------------------------------------------
-# Google Custom Search
-# ---------------------------------------------------------------------------
-
 google_available = pytest.mark.skipif(
     not (os.getenv("GOOGLE_API_KEY") and os.getenv("GOOGLE_CSE_ID")),
     reason="GOOGLE_API_KEY and GOOGLE_CSE_ID not set",
 )
 
 
+# ---------------------------------------------------------------------------
+# Serper provider
+# ---------------------------------------------------------------------------
+
+
+@serper_available
+class TestSerperWebSearchEnv:
+    async def test_search_step_completes(self, model_factory):
+        """Agent can search the web and produce a response."""
+        env = WebSearchEnv(model_factory=model_factory)
+        try:
+            result = await env.step(Action(message="What is the capital of France?"))
+            assert result.termination_reason == TerminationReason.TASK_COMPLETE
+            assert result.observation.final_response
+        finally:
+            await env.cleanup()
+
+    async def test_search_and_scrape_step_completes(self, model_factory):
+        """Agent can search and scrape pages."""
+        env = WebSearchEnv(
+            model_factory=model_factory,
+            scrape_config=ScrapeConfig(),
+        )
+        try:
+            result = await env.step(Action(message="What is the population of Tokyo?"))
+            assert result.termination_reason == TerminationReason.TASK_COMPLETE
+            assert result.observation.final_response
+        finally:
+            await env.cleanup()
+
+    async def test_tool_iteration_limit(self, model_factory):
+        """Environment respects max_tool_iters."""
+        env = WebSearchEnv(
+            model_factory=model_factory,
+            max_tool_iters=1,
+        )
+        try:
+            result = await env.step(
+                Action(
+                    message="Search for 10 different topics: Python, Java, Rust, Go, C++, Ruby, PHP, Swift, Kotlin, Scala. Search each one separately."
+                )
+            )
+            assert result.termination_reason in (
+                TerminationReason.MAX_TOOL_ITERATIONS_REACHED,
+                TerminationReason.TASK_COMPLETE,
+            )
+        finally:
+            await env.cleanup()
+
+    async def test_step_metrics(self, model_factory):
+        """Step produces expected metric keys."""
+        env = WebSearchEnv(model_factory=model_factory)
+        try:
+            result = await env.step(Action(message="Who wrote the book 1984?"))
+            metrics = result.observation.metrics
+            assert "message_count" in metrics
+            assert "model_calls" in metrics
+            assert metrics["model_calls"] >= 1
+        finally:
+            await env.cleanup()
+
+
+# ---------------------------------------------------------------------------
+# Google provider
+# ---------------------------------------------------------------------------
+
+
 @google_available
-class TestGoogleSearch:
-    async def test_basic_search(self, toolkit):
-        result = _skip_on_auth_error(await toolkit.google_search("Python programming", top_k=3))
-        assert "Search failed" not in result
-        assert "1." in result
-
-    async def test_no_results(self, toolkit):
-        result = _skip_on_auth_error(await toolkit.google_search("asdkjhqwelkjhzxcvmnb1234567890", top_k=1))
-        assert "No results found" in result or "1." in result
-
-    async def test_blocked_domains(self):
-        tk = WebSearchToolkit(blocked_domains=["example.com"])
-        result = _skip_on_auth_error(await tk.google_search("example.com test", top_k=3))
-        assert "Search failed" not in result
-        await tk.cleanup()
-
-
-# ---------------------------------------------------------------------------
-# requires_env validation
-# ---------------------------------------------------------------------------
-
-
-class TestRequiresEnv:
-    async def test_google_missing_credentials(self, monkeypatch):
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_CSE_ID", raising=False)
-        tk = WebSearchToolkit()
-        result = await tk.google_search("test")
-        assert "missing required environment variable" in result
-
-    async def test_serper_missing_credentials(self, monkeypatch):
-        monkeypatch.delenv("SERPER_API_KEY", raising=False)
-        tk = WebSearchToolkit()
-        result = await tk.serper_search("test")
-        assert "SERPER_API_KEY" in result
+class TestGoogleWebSearchEnv:
+    async def test_search_step_completes(self, model_factory):
+        """Agent can search with Google Custom Search and produce a response."""
+        env = WebSearchEnv(
+            model_factory=model_factory,
+            search_config=SearchConfig(provider="google"),
+        )
+        try:
+            result = await env.step(Action(message="What is the speed of light?"))
+            assert result.termination_reason == TerminationReason.TASK_COMPLETE
+            assert result.observation.final_response
+        finally:
+            await env.cleanup()

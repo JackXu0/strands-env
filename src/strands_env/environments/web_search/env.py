@@ -15,7 +15,6 @@
 """Web search environment with web search and web scraping tools."""
 
 import asyncio
-import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -25,6 +24,7 @@ from typing_extensions import override
 from strands_env.core.environment import Environment
 from strands_env.core.models import ModelFactory
 from strands_env.core.types import RewardFunction
+from strands_env.tools.web_scraper import WebScraperToolkit
 from strands_env.tools.web_search import WebSearchToolkit
 
 
@@ -41,7 +41,15 @@ class SearchConfig:
 
 
 @dataclass
-class ScrapeConfig: ...  # TODO: implement scrape config
+class ScrapeConfig:
+    timeout: int = 30
+    max_concurrency: int = 10
+    semaphore: asyncio.Semaphore | None = None
+    token_budget: int = 5000
+    summarizer_model_factory: ModelFactory | None = None
+
+    def _scrape_tool_name(self) -> str:
+        return "scrape" if self.summarizer_model_factory is None else "scrape_and_summarize"
 
 
 class WebSearchEnv(Environment):
@@ -59,7 +67,7 @@ class WebSearchEnv(Environment):
         max_tool_calls: int | None = 10,
         verbose: bool = False,
         search_config: SearchConfig = SearchConfig(),
-        scrape_config: ScrapeConfig = ScrapeConfig(),
+        scrape_config: ScrapeConfig | None = None,
     ):
         super().__init__(
             model_factory=model_factory,
@@ -69,8 +77,36 @@ class WebSearchEnv(Environment):
             max_tool_calls=max_tool_calls,
             verbose=verbose,
         )
-        self.search_toolkit = WebSearchToolkit(**dataclasses.asdict(search_config))
+        # By default, only use the search tool.
+        self._search_tool_name = search_config._search_tool_name()
+        self.search_toolkit = WebSearchToolkit(
+            timeout=search_config.timeout,
+            max_concurrency=search_config.max_concurrency,
+            semaphore=search_config.semaphore,
+            blocked_domains=search_config.blocked_domains,
+        )
+        # If scrape_config is provided, use the scrape tool.
+        self._scrape_tool_name: str | None = None
+        self.scraper_toolkit: WebScraperToolkit | None = None
+        if scrape_config is not None:
+            self._scrape_tool_name = scrape_config._scrape_tool_name()
+            self.scraper_toolkit = WebScraperToolkit(
+                token_budget=scrape_config.token_budget,
+                timeout=scrape_config.timeout,
+                max_concurrency=scrape_config.max_concurrency,
+                semaphore=scrape_config.semaphore,
+                summarizer_model_factory=scrape_config.summarizer_model_factory,
+            )
 
     @override
     def get_tools(self):
-        return [getattr(self.search_toolkit, self._search_tool_name())]
+        tools = [getattr(self.search_toolkit, self._search_tool_name)]
+        if self.scraper_toolkit is not None:
+            tools.append(getattr(self.scraper_toolkit, self._scrape_tool_name))
+        return tools
+
+    async def cleanup(self) -> None:
+        """Close shared HTTP sessions for all toolkits."""
+        await self.search_toolkit.cleanup()
+        if self.scraper_toolkit is not None:
+            await self.scraper_toolkit.cleanup()

@@ -14,6 +14,6 @@
 
 """Web search environment with pluggable search providers."""
 
-from .env import WebSearchEnv
+from .env import ScrapeConfig, SearchConfig, WebSearchEnv
 
-__all__ = ["WebSearchEnv"]
+__all__ = ["ScrapeConfig", "SearchConfig", "WebSearchEnv"]
