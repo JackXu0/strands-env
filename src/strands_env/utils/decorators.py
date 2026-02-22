@@ -29,8 +29,8 @@ def requires_env(*env_vars: str):
     Example::
 
         class MyToolkit:
-            @requires_env("SERPER_API_KEY")
             @tool
+            @requires_env("SERPER_API_KEY")
             async def serper_search(self, query: str) -> str:
                 api_key = os.environ["SERPER_API_KEY"]
                 ...

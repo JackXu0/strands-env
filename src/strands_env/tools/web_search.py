@@ -113,8 +113,8 @@ class WebSearchToolkit:
     # Serper
     # ------------------------------------------------------------------
 
-    @requires_env("SERPER_API_KEY")
     @tool
+    @requires_env("SERPER_API_KEY")
     async def serper_search(self, query: str, top_k: int = 5) -> str:
         """Search the web using Serper.dev API.
 
@@ -150,8 +150,8 @@ class WebSearchToolkit:
     # Google Custom Search
     # ------------------------------------------------------------------
 
-    @requires_env("GOOGLE_API_KEY", "GOOGLE_CSE_ID")
     @tool
+    @requires_env("GOOGLE_API_KEY", "GOOGLE_CSE_ID")
     async def google_search(self, query: str, top_k: int = 5) -> str:
         """Search the web using Google Custom Search JSON API.
 

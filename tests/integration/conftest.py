@@ -40,14 +40,16 @@ def sglang_base_url(request):
     return request.config.getoption("--sglang-base-url")
 
 
-@pytest.fixture(scope="session")
-def sglang_client(sglang_base_url):
-    """Shared SGLang client for connection pooling. Skips all tests if server is unreachable."""
+@pytest.fixture
+async def sglang_client(sglang_base_url):
+    """Fresh SGLang client per test to avoid event-loop affinity issues with aiohttp."""
     try:
         check_server_health(sglang_base_url)
     except ConnectionError:
         pytest.skip(f"SGLang server not reachable at {sglang_base_url}")
-    return SGLangClient(sglang_base_url)
+    client = SGLangClient(sglang_base_url)
+    yield client
+    await client.close()
 
 
 @pytest.fixture(scope="session")
