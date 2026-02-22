@@ -63,7 +63,7 @@ class WebSearchEnv(Environment):
         model_factory: ModelFactory,
         system_prompt: str | None = None,
         reward_fn: RewardFunction | None = None,
-        max_tool_iters: int | None = 3,
+        max_tool_iters: int | None = 5,
         max_tool_calls: int | None = 10,
         verbose: bool = False,
         search_config: SearchConfig = SearchConfig(),
