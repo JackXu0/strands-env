@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 import html2text
+import tiktoken
 import trafilatura
 from strands import tool
 
@@ -48,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 30
 DEFAULT_MAX_CONCURRENCY = 10
-DEFAULT_TOKEN_BUDGET = 20000
+DEFAULT_TOKEN_BUDGET = 5000
 
 EXTRACTION_PROMPT_TEMPLATE = """Extract information relevant to the following instruction from the web page content below.
 Be concise and focus on facts, data, and key details. Omit navigation, ads, and irrelevant content.
@@ -99,13 +100,14 @@ class WebScraperToolkit:
             timeout: HTTP request timeout in seconds.
             max_concurrency: Max concurrent requests (ignored if *semaphore* is provided).
             semaphore: Shared semaphore for global rate limiting across toolkit instances.
-            token_budget: Max characters of page content to keep after extraction.
+            token_budget: Max tokens of page content to keep after extraction.
             summarizer_model_factory: Optional factory for creating model instances for LLM summarization.
         """
         self._timeout = timeout
         self._semaphore = semaphore or asyncio.Semaphore(max_concurrency)
         self._session: aiohttp.ClientSession | None = None
         self._token_budget = token_budget
+        self._encoding = tiktoken.encoding_for_model("gpt-4")
         self._summarizer_model_factory = summarizer_model_factory
 
     def _get_session(self) -> aiohttp.ClientSession:
@@ -138,8 +140,9 @@ class WebScraperToolkit:
         """
 
         def _truncate(text: str) -> str:
-            if len(text) > self._token_budget:
-                return text[: self._token_budget] + "...(content truncated)"
+            tokens = self._encoding.encode(text)
+            if len(tokens) > self._token_budget:
+                return self._encoding.decode(tokens[: self._token_budget]) + "...(content truncated)"
             return text
 
         content = await asyncio.to_thread(
