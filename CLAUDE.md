@@ -26,7 +26,7 @@ mypy src/strands_env
 pytest tests/unit/ -v
 
 # Single test
-pytest tests/unit/test_environment.py::TestStep::test_successful_step -v
+pytest tests/unit/core/test_environment.py::TestStep::test_successful_step -v
 
 # Unit tests with coverage
 pytest tests/unit/ -v --cov=src/strands_env --cov-report=html
