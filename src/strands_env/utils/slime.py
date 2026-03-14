@@ -19,15 +19,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-import wandb  # type: ignore
-
 if TYPE_CHECKING:
     from slime.utils.types import Sample  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-# Make sure nested metrics are logged with the correct default "rollout/step".
-wandb.define_metric("rollout/*/*", step_metric="rollout/step")
+# NOTE: response_len in default logging refers to loss_mask=1 tokens
 
 
 def collect_env_metrics(samples: list[Sample]) -> dict[str, float]:
@@ -40,10 +37,10 @@ def collect_env_metrics(samples: list[Sample]) -> dict[str, float]:
         samples: List of slime `Sample` objects with a `metrics` dict attribute.
 
     Returns:
-        Dict with `{name}/mean`, `{name}/median`, `{name}/max`, `{name}/min`
-        for each metric, plus `tool_success_rate` and `tool_parse_error_rate`.
+        Dict with `{name}_mean`, `{name}_median`, `{name}_max`, `{name}_min`
+        for each metric, including per-tool breakdowns.
     """
-    from slime.utils.metric_utils import compute_statistics, dict_add_prefix  # type: ignore
+    from slime.utils.metric_utils import compute_statistics  # type: ignore
 
     if not samples:
         return {}
@@ -51,41 +48,35 @@ def collect_env_metrics(samples: list[Sample]) -> dict[str, float]:
     per_sample: dict[str, list[float]] = {
         "message_count": [],
         "tool_iters": [],
-        "tool_calls": [],
         "model_calls": [],
         "model_latency_s": [],
-        "tool_latency_s": [],
         "cache_hit_rate": [],
     }
-    total_tool_successes = 0
-    total_tool_calls = 0
-    total_parse_errors = 0
 
     for sample in samples:
         # NOTE: need to set sample.metrics = step_result.observation.metrics in generate()
         metrics: dict[str, Any] = getattr(sample, "metrics", None) or {}
+        if not metrics:
+            continue
 
         per_sample["message_count"].append(metrics.get("message_count", 0))
         per_sample["tool_iters"].append(metrics.get("tool_iters", 0))
-        per_sample["tool_calls"].append(metrics.get("tool_calls", 0))
         per_sample["model_calls"].append(metrics.get("model_calls", 0))
         latency = metrics.get("model_latency_s")
         per_sample["model_latency_s"].append(latency["total"] if latency else 0)
         per_sample["cache_hit_rate"].append(metrics.get("cache_hit_rate") or 0)
 
-        per_tool = metrics.get("per_tool_metrics") or {}
-        per_sample["tool_latency_s"].append(sum(tm["latency_s"] for tm in per_tool.values()))
-        total_tool_calls += sum(tm["calls"] for tm in per_tool.values())
-        total_tool_successes += sum(tm["successes"] for tm in per_tool.values())
-        total_parse_errors += sum(tm.get("parse_errors", 0) for tm in per_tool.values())
+        for tool_name, tm in (metrics.get("per_tool_metrics") or {}).items():
+            key = f"{tool_name}_tool"
+            calls = tm["calls"]
+            per_sample.setdefault(f"{key}_calls", []).append(calls)
+            per_sample.setdefault(f"{key}_latency_s", []).append(tm["latency_s"])
+            per_sample.setdefault(f"{key}_success_rate", []).append(tm["successes"] / calls)
+            per_sample.setdefault(f"{key}_parse_error_rate", []).append(tm.get("parse_errors", 0) / calls)
 
     log_dict: dict[str, float] = {}
     for name, values in per_sample.items():
-        log_dict |= dict_add_prefix(compute_statistics(values), f"{name}/")
-
-    if total_tool_calls > 0:
-        log_dict["tool_success_rate"] = total_tool_successes / total_tool_calls
-        log_dict["tool_parse_error_rate"] = total_parse_errors / total_tool_calls
+        log_dict |= {f"{name}_{k}": v for k, v in compute_statistics(values).items()}
 
     return log_dict
 
@@ -94,36 +85,37 @@ def log_rollout_metrics(
     rollout_id: int,
     args: Any,
     samples: list[Sample],
-    _rollout_extra_metrics: dict | None,
+    rollout_extra_metrics: dict | None,
     _rollout_time: float,
 ) -> bool:
     """Custom rollout log function for slime.
 
-    Extracts strands-env environment metrics from samples and logs them alongside
-    slime's default metrics. Returns `False` so slime's default logging still runs.
+    Injects strands-env environment metrics into `rollout_extra_metrics` so they
+    are merged into SLiME's single `wandb.log()` call. Returns `False` so slime's
+    default logging still runs.
 
     Args:
         rollout_id: Current rollout iteration number.
         args: slime training arguments.
         samples: List of samples from the rollout.
-        _rollout_extra_metrics: Additional metrics from rollout pipeline (unused).
+        rollout_extra_metrics: Additional metrics dict from rollout pipeline — mutated
+            in place to include env metrics.
         _rollout_time: Wall-clock time for the rollout (unused).
 
     Returns:
         `False` to continue with default slime logging.
     """
-    from slime.utils import logging_utils  # type: ignore
-    from slime.utils.metric_utils import compute_rollout_step, dict_add_prefix  # type: ignore
+    from slime.utils.metric_utils import dict_add_prefix  # type: ignore
 
     log_dict = collect_env_metrics(samples)
     if not log_dict:
         return False
 
-    step = compute_rollout_step(args, rollout_id)
     log_dict = dict_add_prefix(log_dict, "rollout/")
-    log_dict["rollout/step"] = step
-    logging_utils.log(args, log_dict, step_key="rollout/step")
 
-    logger.debug("Logged strands-env metrics for rollout %s: %s", rollout_id, list(log_dict.keys()))
+    if rollout_extra_metrics is not None:
+        rollout_extra_metrics.update(log_dict)
+    else:
+        logger.warning("rollout_extra_metrics is None, env metrics will not be logged")
 
     return False
