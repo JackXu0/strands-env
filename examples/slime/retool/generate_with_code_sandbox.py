@@ -33,9 +33,9 @@ from strands_env.core.types import Action, TaskContext
 from strands_env.environments.code_sandbox import CodeMode, CodeSandboxEnv
 from strands_env.rewards.math_verify_reward import MathVerifyReward
 from strands_env.utils.aws import get_client
-from strands_env.utils.slime import log_rollout_metrics
+from strands_env.utils.slime import RolloutLogger
 
-log_rollout_metrics = log_rollout_metrics
+log_rollout_metrics = RolloutLogger(n_rollouts_per_step=3, log_per_tool_metrics=False).log_rollouts
 
 logger = logging.getLogger(__name__)
 
