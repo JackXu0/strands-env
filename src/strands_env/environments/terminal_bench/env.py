@@ -139,7 +139,7 @@ class TerminalBenchEnv(Environment):
             Command output (stdout + stderr combined).
         """
         if not self.docker_env:
-            raise RuntimeError("Environment not initialized. Call reset() first.")
+            raise RuntimeError("Docker environment not initialized")
         result = await self.docker_env.exec(command, timeout_sec=self.config.timeout_s)
         output = result.stdout or ""
         if result.stderr:
@@ -155,7 +155,7 @@ class TerminalBenchEnv(Environment):
 
     @override
     async def cleanup(self) -> None:
-        """Stop and delete the environment."""
+        """Stop and delete the Docker environment."""
         if self.docker_env:
             await self.docker_env.stop(delete=True)
             self.docker_env = None
