@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Generate function for retool RL training using strands-env CodeSandboxEnv.
+Generate function for retool RL training using `strands-env`'s `CodeSandboxEnv`.
 
 Uses:
 - AWS Bedrock-based code execution
